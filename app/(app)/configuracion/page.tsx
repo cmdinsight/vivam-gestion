@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PLAN_LABELS, MODALIDAD_LABELS } from "@/lib/format";
+import { PLAN_LABELS, MODALIDAD_LABELS, UNIDAD_LABELS } from "@/lib/format";
 
 type Config = {
   bpsPatronalPct: string;
@@ -31,12 +31,35 @@ type ModalidadCfg = {
   descuentoPct: string;
 };
 
+type ExtraServicio = {
+  id: string;
+  nombre: string;
+  precioSinIva: string;
+  unidad: string;
+  aplicaIva: boolean;
+  activo: boolean;
+};
+
+const EXTRA_IVA_PCT = 10;
+
+const EXTRA_NUEVO_VACIO = { nombre: "", precioSinIva: "0", unidad: "POR_VISITA", aplicaIva: true };
+
 export default function ConfiguracionPage() {
   const [cfg, setCfg] = useState<Config | null>(null);
   const [msgCfg, setMsgCfg] = useState("");
   const [planes, setPlanes] = useState<PlanCfg[]>([]);
   const [modalidades, setModalidades] = useState<ModalidadCfg[]>([]);
   const [msgPlanes, setMsgPlanes] = useState("");
+  const [extras, setExtras] = useState<ExtraServicio[]>([]);
+  const [msgExtras, setMsgExtras] = useState("");
+  const [nuevoExtra, setNuevoExtra] = useState(EXTRA_NUEVO_VACIO);
+  const [mostrarNuevoExtra, setMostrarNuevoExtra] = useState(false);
+
+  function loadExtras() {
+    fetch("/api/extras")
+      .then((r) => r.json())
+      .then(setExtras);
+  }
 
   useEffect(() => {
     fetch("/api/configuracion")
@@ -48,6 +71,7 @@ export default function ConfiguracionPage() {
         setPlanes(d.planes);
         setModalidades(d.modalidades);
       });
+    loadExtras();
   }, []);
 
   async function onSubmitCfg(e: React.FormEvent) {
@@ -97,6 +121,47 @@ export default function ConfiguracionPage() {
       }),
     });
     setMsgPlanes(res.ok ? "Planes y modalidades guardados." : "Error al guardar.");
+  }
+
+  function updateExtra(id: string, field: keyof ExtraServicio, value: string | boolean) {
+    setExtras((prev) => prev.map((x) => (x.id === id ? { ...x, [field]: value } : x)));
+  }
+
+  async function onSubmitExtras(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await fetch("/api/extras", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        extras: extras.map((x) => ({
+          id: x.id,
+          nombre: x.nombre,
+          precioSinIva: parseFloat(x.precioSinIva),
+          unidad: x.unidad,
+          aplicaIva: x.aplicaIva,
+          activo: x.activo,
+        })),
+      }),
+    });
+    setMsgExtras(res.ok ? "Extras guardados." : "Error al guardar.");
+  }
+
+  async function crearExtra(e: React.FormEvent) {
+    e.preventDefault();
+    await fetch("/api/extras", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...nuevoExtra, precioSinIva: parseFloat(nuevoExtra.precioSinIva) }),
+    });
+    setNuevoExtra(EXTRA_NUEVO_VACIO);
+    setMostrarNuevoExtra(false);
+    loadExtras();
+  }
+
+  async function eliminarExtra(id: string) {
+    if (!confirm("¿Eliminar este extra del catálogo?")) return;
+    await fetch(`/api/extras/${id}`, { method: "DELETE" });
+    loadExtras();
   }
 
   if (!cfg) return <p className="text-navy/60">Cargando…</p>;
@@ -368,6 +433,147 @@ export default function ConfiguracionPage() {
           El precio mensual que se le cobra a cada cliente se calcula solo: precio base del plan × (1 − descuento de
           la modalidad elegida). No se tipea a mano en la ficha del cliente.
         </p>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-lg">Extras y procederes</h2>
+          <button className="btn-ghost text-sm" type="button" onClick={() => setMostrarNuevoExtra(!mostrarNuevoExtra)}>
+            + Agregar extra
+          </button>
+        </div>
+        <p className="text-xs text-navy/40">
+          Catálogo de servicios cotizables aparte del plan (ej. visita médica, reporte PDF). Todavía es solo el
+          catálogo de precios — no está conectado a la generación automática de Cobros.
+        </p>
+
+        {mostrarNuevoExtra && (
+          <form onSubmit={crearExtra} className="card p-4 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <div className="sm:col-span-2">
+              <label className="label">Nombre</label>
+              <input
+                className="input"
+                required
+                value={nuevoExtra.nombre}
+                onChange={(e) => setNuevoExtra({ ...nuevoExtra, nombre: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Precio sin IVA ($)</label>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                value={nuevoExtra.precioSinIva}
+                onChange={(e) => setNuevoExtra({ ...nuevoExtra, precioSinIva: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Unidad</label>
+              <select
+                className="input"
+                value={nuevoExtra.unidad}
+                onChange={(e) => setNuevoExtra({ ...nuevoExtra, unidad: e.target.value })}
+              >
+                <option value="POR_VISITA">Por visita</option>
+                <option value="POR_MES">Por mes</option>
+              </select>
+            </div>
+            <div className="sm:col-span-4 flex gap-2">
+              <button className="btn-primary text-sm" type="submit">
+                Crear extra
+              </button>
+              <button className="btn-ghost text-sm" type="button" onClick={() => setMostrarNuevoExtra(false)}>
+                Cancelar
+              </button>
+            </div>
+          </form>
+        )}
+
+        <form onSubmit={onSubmitExtras}>
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b border-navy/10 text-navy/60">
+                  <th className="p-2">Nombre</th>
+                  <th className="p-2">Precio sin IVA</th>
+                  <th className="p-2">Unidad</th>
+                  <th className="p-2">+ IVA {EXTRA_IVA_PCT}%</th>
+                  <th className="p-2">Total cliente</th>
+                  <th className="p-2">Activo</th>
+                  <th className="p-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {extras.map((x) => {
+                  const precio = parseFloat(x.precioSinIva) || 0;
+                  const iva = x.aplicaIva ? precio * (EXTRA_IVA_PCT / 100) : 0;
+                  return (
+                    <tr key={x.id} className="border-b border-navy/5">
+                      <td className="p-2">
+                        <input
+                          className="input"
+                          value={x.nombre}
+                          onChange={(e) => updateExtra(x.id, "nombre", e.target.value)}
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          className="input max-w-[8rem]"
+                          type="number"
+                          step="0.01"
+                          value={x.precioSinIva}
+                          onChange={(e) => updateExtra(x.id, "precioSinIva", e.target.value)}
+                        />
+                      </td>
+                      <td className="p-2">
+                        <select
+                          className="input"
+                          value={x.unidad}
+                          onChange={(e) => updateExtra(x.id, "unidad", e.target.value)}
+                        >
+                          <option value="POR_VISITA">{UNIDAD_LABELS.POR_VISITA}</option>
+                          <option value="POR_MES">{UNIDAD_LABELS.POR_MES}</option>
+                        </select>
+                      </td>
+                      <td className="p-2">${iva.toFixed(0)}</td>
+                      <td className="p-2 font-semibold text-teal">${(precio + iva).toFixed(0)}</td>
+                      <td className="p-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={x.activo}
+                          onChange={(e) => updateExtra(x.id, "activo", e.target.checked)}
+                        />
+                      </td>
+                      <td className="p-2 text-right">
+                        <button
+                          type="button"
+                          className="text-red-500 hover:underline text-xs"
+                          onClick={() => eliminarExtra(x.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {extras.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-4 text-center text-navy/50">
+                      Sin extras cargados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {msgExtras && <p className="text-sm text-teal mt-3">{msgExtras}</p>}
+          {extras.length > 0 && (
+            <button className="btn-primary mt-3" type="submit">
+              Guardar extras
+            </button>
+          )}
+        </form>
       </section>
     </div>
   );

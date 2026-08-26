@@ -237,3 +237,23 @@ model ModalidadConfig {
   descuentoPct Decimal   @db.Decimal(5, 2)
   updatedAt    DateTime  @updatedAt
 }
+
+enum UnidadFacturacion {
+  POR_VISITA
+  POR_MES
+}
+
+// Catálogo de servicios extra / procederes cotizables aparte del plan
+// (ej. visita médica domiciliaria, reporte PDF mensual). Todavía no está
+// conectado a la facturación de Cobros — es solo el catálogo de precios.
+model ExtraServicio {
+  id           String            @id @default(cuid())
+  nombre       String
+  precioSinIva Decimal           @db.Decimal(12, 2)
+  unidad       UnidadFacturacion
+  aplicaIva    Boolean           @default(true)
+  activo       Boolean           @default(true)
+  descripcion  String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}

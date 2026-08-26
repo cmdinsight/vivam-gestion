@@ -52,6 +52,11 @@ export const MODALIDAD_LABELS: Record<string, string> = {
   ANUAL: "Anual",
 };
 
+export const UNIDAD_LABELS: Record<string, string> = {
+  POR_VISITA: "Por visita",
+  POR_MES: "Por mes",
+};
+
 export const FACTURACION_LABELS: Record<string, string> = {
   PLAN_MENSUAL: "Plan mensual",
   POR_HORA: "Por hora (sin plan)",
