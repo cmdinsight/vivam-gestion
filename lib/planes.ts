@@ -73,6 +73,31 @@ export function debeAlertarMargen(planCfg: { alertaAnual: boolean }, modalidad: 
   return planCfg.alertaAnual && modalidad === "ANUAL";
 }
 
+function diasEnMes(mes: string): number {
+  const [y, m] = mes.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+/**
+ * Si el mes facturado es el primer mes de servicio del cliente (el de su
+ * fechaInicio) y arrancó después del día 1, se cobra proporcional: precio
+ * mensual × (días utilizados este mes ÷ días totales del mes), por regla de
+ * tres. Los meses siguientes se cobran completos. Devuelve null si no aplica
+ * prorrateo (se debe cobrar el precio mensual completo).
+ */
+export function calcularProrateoPrimerMes(precioMensual: Prisma.Decimal.Value, fechaInicio: Date, mes: string) {
+  const mesInicio = `${fechaInicio.getUTCFullYear()}-${String(fechaInicio.getUTCMonth() + 1).padStart(2, "0")}`;
+  if (mesInicio !== mes) return null;
+
+  const diaInicio = fechaInicio.getUTCDate();
+  if (diaInicio <= 1) return null;
+
+  const totalDias = diasEnMes(mes);
+  const diasUsados = totalDias - diaInicio + 1;
+  const monto = Math.round(D(precioMensual).mul(diasUsados).div(totalDias).toNumber());
+  return { monto, diasUsados, totalDias };
+}
+
 /**
  * Calcula el monto a cobrar a un cliente facturado "por hora sin plan" para un
  * mes dado, a partir de sus Turnos reales (diurnos/nocturnos, excluyendo

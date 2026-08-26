@@ -41,6 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: { modulo: stri
         Estado: ESTADO_COBRO_LABELS[c.estado],
         MontoCobrado: c.montoCobrado?.toString() ?? "",
         FechaCobro: dateInput(c.fechaCobro),
+        Notas: c.notas ?? "",
       }));
       const csv = toCsv(rows, Object.keys(rows[0] ?? { Mes: "" }));
       return csvResponse(`cobros${mes ? "_" + mes : ""}.csv`, csv);

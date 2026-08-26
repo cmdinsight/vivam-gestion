@@ -24,7 +24,7 @@ export function esDiurno(horaInicio: string): boolean {
   return min >= toMinutos("06:00") && min < toMinutos("20:00");
 }
 
-function mesDeFecha(fecha: Date): string {
+export function mesDeFecha(fecha: Date): string {
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}`;
 }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { currentMonth } from "@/lib/format";
-import { calcularMontoPorHora } from "@/lib/planes";
+import { calcularMontoPorHora, calcularProrateoPrimerMes } from "@/lib/planes";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +32,29 @@ export async function POST(req: NextRequest) {
   const nuevos = clientes.filter((c) => !existentesMap.has(c.id));
   if (nuevos.length > 0) {
     const data = await Promise.all(
-      nuevos.map(async (c) => ({
-        clienteId: c.id,
-        mes: targetMes,
-        montoEsperado: c.facturacion === "POR_HORA" ? (await calcularMontoPorHora(c.id, targetMes)).total : c.precioMensual,
-        fechaVencimiento: new Date(y, m - 1, 10),
-        estado: "PENDIENTE" as const,
-      }))
+      nuevos.map(async (c) => {
+        if (c.facturacion === "POR_HORA") {
+          return {
+            clienteId: c.id,
+            mes: targetMes,
+            montoEsperado: (await calcularMontoPorHora(c.id, targetMes)).total,
+            fechaVencimiento: new Date(y, m - 1, 10),
+            estado: "PENDIENTE" as const,
+            notas: null,
+          };
+        }
+        const prorateo = calcularProrateoPrimerMes(c.precioMensual, c.fechaInicio, targetMes);
+        return {
+          clienteId: c.id,
+          mes: targetMes,
+          montoEsperado: prorateo ? prorateo.monto : c.precioMensual,
+          fechaVencimiento: new Date(y, m - 1, 10),
+          estado: "PENDIENTE" as const,
+          notas: prorateo
+            ? `Prorrateado: primer mes de servicio, ${prorateo.diasUsados}/${prorateo.totalDias} días.`
+            : null,
+        };
+      })
     );
     await prisma.cobro.createMany({ data });
   }

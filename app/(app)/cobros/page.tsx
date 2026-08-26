@@ -11,6 +11,7 @@ type Cobro = {
   estado: string;
   montoCobrado: string | null;
   fechaCobro: string | null;
+  notas: string | null;
   cliente: { nombrePaciente: string; familiaResponsable: string };
 };
 
@@ -126,7 +127,10 @@ export default function CobrosPage() {
                 <tr key={c.id} className="border-b border-navy/5">
                   <td className="p-3 font-semibold">{c.cliente.nombrePaciente}</td>
                   <td className="p-3">{c.cliente.familiaResponsable}</td>
-                  <td className="p-3">{money(c.montoEsperado)}</td>
+                  <td className="p-3">
+                    {money(c.montoEsperado)}
+                    {c.notas && <p className="text-xs text-champagne font-normal mt-0.5">{c.notas}</p>}
+                  </td>
                   <td className="p-3">{new Date(c.fechaVencimiento).toLocaleDateString("es-UY")}</td>
                   <td className="p-3">
                     <span className={`badge ${ESTADO_COLOR[c.estado]}`}>{ESTADO_COBRO_LABELS[c.estado]}</span>
