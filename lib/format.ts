@@ -1,0 +1,65 @@
+export function money(value: number | string | null | undefined): string {
+  const n = typeof value === "string" ? parseFloat(value) : value ?? 0;
+  return new Intl.NumberFormat("es-UY", {
+    style: "currency",
+    currency: "UYU",
+    maximumFractionDigits: 0,
+  }).format(n || 0);
+}
+
+export function num(value: number | string | null | undefined, decimals = 2): string {
+  const n = typeof value === "string" ? parseFloat(value) : value ?? 0;
+  return new Intl.NumberFormat("es-UY", {
+    maximumFractionDigits: decimals,
+  }).format(n || 0);
+}
+
+export function currentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function monthLabel(mes: string): string {
+  const [y, m] = mes.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString("es-UY", { month: "long", year: "numeric" });
+}
+
+export function shiftMonth(mes: string, delta: number): string {
+  const [y, m] = mes.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function dateInput(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toISOString().slice(0, 10);
+}
+
+export const PLAN_LABELS: Record<string, string> = {
+  ESENCIAL_LUNES_VIERNES: "Esencial Lun-Vie",
+  ESENCIAL_COMPLETO: "Esencial Completo",
+  EXTENDIDO: "Extendido",
+  INTEGRAL: "Integral",
+};
+
+export const MODALIDAD_LABELS: Record<string, string> = {
+  MENSUAL: "Mensual",
+  TRIMESTRAL: "Trimestral",
+  SEMESTRAL: "Semestral",
+  ANUAL: "Anual",
+};
+
+export const ESTADO_CLIENTE_LABELS: Record<string, string> = {
+  PROSPECTO: "Prospecto",
+  ACTIVO: "Activo",
+  PAUSADO: "Pausado",
+  BAJA: "Baja",
+};
+
+export const ESTADO_COBRO_LABELS: Record<string, string> = {
+  PENDIENTE: "Pendiente",
+  COBRADO: "Cobrado",
+  ATRASADO: "Atrasado",
+};

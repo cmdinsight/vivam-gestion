@@ -1,0 +1,229 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  usuario      String   @unique
+  nombre       String
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+enum EstadoCliente {
+  PROSPECTO
+  ACTIVO
+  PAUSADO
+  BAJA
+}
+
+enum PlanContratado {
+  ESENCIAL_LUNES_VIERNES
+  ESENCIAL_COMPLETO
+  EXTENDIDO
+  INTEGRAL
+}
+
+enum Modalidad {
+  MENSUAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+model Cliente {
+  id                  String           @id @default(cuid())
+  nombrePaciente      String
+  familiaResponsable  String
+  contacto            String?
+  zona                String?
+  plan                PlanContratado
+  fechaInicio         DateTime
+  modalidad           Modalidad
+  precioMensual       Decimal          @db.Decimal(12, 2)
+  estado              EstadoCliente    @default(PROSPECTO)
+  notas               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  cobros              Cobro[]
+  asignaciones        AsignacionFija[]
+  turnos              Turno[]
+}
+
+enum EstadoCobro {
+  PENDIENTE
+  COBRADO
+  ATRASADO
+}
+
+model Cobro {
+  id               String      @id @default(cuid())
+  clienteId        String
+  cliente          Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  mes              String
+  montoEsperado    Decimal     @db.Decimal(12, 2)
+  fechaVencimiento DateTime
+  estado           EstadoCobro @default(PENDIENTE)
+  montoCobrado     Decimal?    @db.Decimal(12, 2)
+  fechaCobro       DateTime?
+  notas            String?
+  createdAt        DateTime    @default(now())
+
+  @@unique([clienteId, mes])
+}
+
+enum TipoTarifa {
+  HORA
+  MENSUAL
+}
+
+enum EstadoTrabajador {
+  ACTIVO
+  INACTIVO
+}
+
+model Trabajador {
+  id                            String                 @id @default(cuid())
+  nombre                        String
+  contacto                      String?
+  fechaIngreso                  DateTime
+  categoriaLaboral              String?
+  tipoTarifa                    TipoTarifa
+  tarifa                        Decimal                @db.Decimal(12, 2)
+  cuentaBancaria                String?
+  diasLicenciaAnualesOverride   Int?
+  proximaFechaLicenciaEstimada  DateTime?
+  estado                        EstadoTrabajador       @default(ACTIVO)
+  notas                         String?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  asignaciones                  AsignacionFija[]
+  turnos                        Turno[]
+  liquidaciones                 LiquidacionMensual[]
+  movimientos                   MovimientoProvision[]
+}
+
+// Vincula un cliente con un cuidador fijo según un patrón semanal recurrente
+// (ej. lunes a viernes 08:00-16:00). A partir de esto se generan los Turnos.
+model AsignacionFija {
+  id            String     @id @default(cuid())
+  clienteId     String
+  cliente       Cliente    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  trabajadorId  String
+  trabajador    Trabajador @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+  diasSemana    Int[] // 0=domingo … 6=sábado
+  horaInicio    String // "HH:MM"
+  horaFin       String // "HH:MM" (puede cruzar medianoche si horaFin < horaInicio)
+  fechaInicio   DateTime
+  fechaFin      DateTime?
+  activa        Boolean    @default(true)
+  notas         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  turnos        Turno[]
+}
+
+enum EstadoTurno {
+  PROGRAMADO
+  TRABAJADO
+  NO_TRABAJADO
+}
+
+// Un turno concreto en una fecha puntual. Se genera automáticamente a partir
+// de una AsignacionFija, o se crea manualmente para cobertura extra puntual.
+// Una vez editado (editado=true) la regeneración nunca lo vuelve a tocar.
+model Turno {
+  id             String          @id @default(cuid())
+  trabajadorId   String
+  trabajador     Trabajador      @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+  clienteId      String?
+  cliente        Cliente?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  asignacionId   String?
+  asignacion     AsignacionFija? @relation(fields: [asignacionId], references: [id], onDelete: SetNull)
+  fecha          DateTime
+  mes            String
+  horaInicio     String
+  horaFin        String
+  horas          Decimal         @db.Decimal(6, 2)
+  estado         EstadoTurno     @default(PROGRAMADO)
+  motivo         String?
+  editado        Boolean         @default(false)
+  origenManual   Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([asignacionId, fecha])
+}
+
+model LiquidacionMensual {
+  id                 String     @id @default(cuid())
+  trabajadorId       String
+  trabajador         Trabajador @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+  mes                String
+  horasTotales       Decimal    @db.Decimal(8, 2)
+  sueldoNominal      Decimal    @db.Decimal(12, 2)
+  bpsPatronal        Decimal    @db.Decimal(12, 2)
+  bse                Decimal    @db.Decimal(12, 2)
+  aguinaldoProvision Decimal    @db.Decimal(12, 2)
+  licenciaProvision  Decimal    @db.Decimal(12, 2)
+  procesadoEn        DateTime   @default(now())
+
+  @@unique([trabajadorId, mes])
+}
+
+enum TipoProvision {
+  AGUINALDO
+  LICENCIA
+}
+
+model MovimientoProvision {
+  id           String        @id @default(cuid())
+  trabajadorId String
+  trabajador   Trabajador    @relation(fields: [trabajadorId], references: [id], onDelete: Cascade)
+  tipo         TipoProvision
+  mes          String
+  monto        Decimal       @db.Decimal(12, 2)
+  esPago       Boolean       @default(false)
+  descripcion  String?
+  fecha        DateTime      @default(now())
+}
+
+model Configuracion {
+  id                 Int      @id @default(1)
+  bpsPatronalPct     Decimal  @db.Decimal(5, 2) @default(19.5)
+  bsePct             Decimal  @db.Decimal(5, 2) @default(3)
+  aguinaldoDivisor   Decimal  @db.Decimal(5, 2) @default(12)
+  licenciaDiasAnio   Int      @default(20)
+  // % de licencia + salario vacacional sobre el sueldo nominal (a confirmar con el contador)
+  licenciaPct        Decimal  @db.Decimal(5, 2) @default(8.33)
+  // Costo total fijo por hora de cuidador (ya incluye BPS+BSE+aguinaldo+licencia)
+  tarifaHoraDiurna   Decimal  @db.Decimal(12, 2) @default(230)
+  tarifaHoraNocturna Decimal  @db.Decimal(12, 2) @default(273)
+  updatedAt          DateTime @updatedAt
+}
+
+// Datos maestros de cada uno de los 4 planes oficiales Vivam. precioBase es el
+// precio de tarifa llena (100%, sin descuento de modalidad); el precio final
+// al cliente sale de precioBase * (1 - descuento de la modalidad elegida).
+model PlanConfig {
+  plan              PlanContratado @id
+  horasMes          Int
+  precioBase        Decimal        @db.Decimal(12, 2)
+  costoCuidadorMes  Decimal        @db.Decimal(12, 2)
+  cupoProcederesMes Int
+  // Si true, se advierte (sin bloquear) al contratar este plan en modalidad ANUAL
+  alertaAnual       Boolean        @default(false)
+  updatedAt         DateTime       @updatedAt
+}
+
+// Descuento total de cada modalidad de compromiso sobre el precioBase del plan.
+model ModalidadConfig {
+  modalidad    Modalidad @id
+  descuentoPct Decimal   @db.Decimal(5, 2)
+  updatedAt    DateTime  @updatedAt
+}
