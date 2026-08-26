@@ -17,6 +17,11 @@ const DEFAULTS_PLAN: Record<PlanContratado, { horasMes: number; precioBase: numb
   ESENCIAL_COMPLETO: { horasMes: 240, precioBase: 92400, costoCuidadorMes: 55200, cupoProcederesMes: 2, alertaAnual: true },
   EXTENDIDO: { horasMes: 480, precioBase: 184800, costoCuidadorMes: 110400, cupoProcederesMes: 5, alertaAnual: false },
   INTEGRAL: { horasMes: 720, precioBase: 304920, costoCuidadorMes: 175920, cupoProcederesMes: 10, alertaAnual: false },
+  // 240 h nocturnas/mes × $455 (tarifa cliente nocturna) × 1.10 IVA = 120120 tarifa llena.
+  // Con el 5% de volumen ya incluido en el descuento de cada modalidad, el mensual
+  // rotativo da $114.114 c/IVA, igual que la matriz. Anual sí se puede ofrecer
+  // proactivamente (margen 31,4%, no cae en zona de alerta como los Esenciales).
+  VIVAM_NOCTURNO: { horasMes: 240, precioBase: 120120, costoCuidadorMes: 65520, cupoProcederesMes: 2, alertaAnual: false },
 };
 
 const DEFAULTS_MODALIDAD: Record<Modalidad, number> = {

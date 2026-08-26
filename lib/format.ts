@@ -42,6 +42,7 @@ export const PLAN_LABELS: Record<string, string> = {
   ESENCIAL_COMPLETO: "Esencial Completo",
   EXTENDIDO: "Extendido",
   INTEGRAL: "Integral",
+  VIVAM_NOCTURNO: "Vivam Nocturno",
 };
 
 export const MODALIDAD_LABELS: Record<string, string> = {

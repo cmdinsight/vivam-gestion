@@ -27,6 +27,7 @@ enum PlanContratado {
   ESENCIAL_COMPLETO
   EXTENDIDO
   INTEGRAL
+  VIVAM_NOCTURNO
 }
 
 enum Modalidad {
