@@ -64,6 +64,7 @@ export default function ClienteDetailPage() {
   const [mes, setMes] = useState(currentMonth());
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [nombresPorTrabajador, setNombresPorTrabajador] = useState<Record<string, string>>({});
 
@@ -109,15 +110,44 @@ export default function ClienteDetailPage() {
 
   async function crearAsignacion(e: React.FormEvent) {
     e.preventDefault();
-    await fetch("/api/asignaciones", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, clienteId: id, fechaFin: form.fechaFin || null }),
-    });
+    if (editId) {
+      await fetch(`/api/asignaciones/${editId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, fechaFin: form.fechaFin || null, activa: true }),
+      });
+    } else {
+      await fetch("/api/asignaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, clienteId: id, fechaFin: form.fechaFin || null }),
+      });
+    }
     setShowForm(false);
+    setEditId(null);
     setForm(EMPTY_FORM);
     loadAsignaciones();
     loadTurnos();
+  }
+
+  function startEditAsignacion(a: Asignacion) {
+    setEditId(a.id);
+    setForm({
+      trabajadorId: a.trabajadorId,
+      diasSemana: a.diasSemana,
+      horaInicio: a.horaInicio,
+      horaFin: a.horaFin,
+      fechaInicio: dateInput(a.fechaInicio),
+      fechaFin: a.fechaFin ? dateInput(a.fechaFin) : "",
+      notas: "",
+    });
+    setShowForm(true);
+  }
+
+  function cancelarForm() {
+    setShowForm(false);
+    setEditId(null);
+    setForm(EMPTY_FORM);
   }
 
   async function finalizarAsignacion(asignacionId: string) {
@@ -141,28 +171,41 @@ export default function ClienteDetailPage() {
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-display text-lg">Cuidadores asignados (fijo)</h2>
-          <button className="btn-primary text-sm" onClick={() => setShowForm(!showForm)}>
+          <button
+            className="btn-primary text-sm"
+            onClick={() => (showForm ? cancelarForm() : setShowForm(true))}
+          >
             + Nueva asignación
           </button>
         </div>
 
         {showForm && (
           <form onSubmit={crearAsignacion} className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 border-b border-navy/10 pb-4">
+            {editId && (
+              <div className="sm:col-span-2 rounded-lg bg-champagne/10 border border-champagne/30 p-2 text-sm text-navy/70">
+                Editando asignación de <strong>{nombresPorTrabajador[form.trabajadorId]}</strong>. El cuidador y la
+                fecha de inicio no se pueden cambiar acá — si hay que cambiarlos, finalizá esta y creá una nueva.
+              </div>
+            )}
             <div>
               <label className="label">Cuidador</label>
-              <select
-                className="input"
-                required
-                value={form.trabajadorId}
-                onChange={(e) => setForm({ ...form, trabajadorId: e.target.value })}
-              >
-                <option value="">Seleccionar…</option>
-                {trabajadores.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.nombre}
-                  </option>
-                ))}
-              </select>
+              {editId ? (
+                <div className="input bg-navy/5 text-navy/70">{nombresPorTrabajador[form.trabajadorId]}</div>
+              ) : (
+                <select
+                  className="input"
+                  required
+                  value={form.trabajadorId}
+                  onChange={(e) => setForm({ ...form, trabajadorId: e.target.value })}
+                >
+                  <option value="">Seleccionar…</option>
+                  {trabajadores.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="label">Días de la semana</label>
@@ -205,13 +248,17 @@ export default function ClienteDetailPage() {
             </div>
             <div>
               <label className="label">Vigencia desde</label>
-              <input
-                className="input"
-                type="date"
-                required
-                value={form.fechaInicio}
-                onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })}
-              />
+              {editId ? (
+                <div className="input bg-navy/5 text-navy/70">{form.fechaInicio}</div>
+              ) : (
+                <input
+                  className="input"
+                  type="date"
+                  required
+                  value={form.fechaInicio}
+                  onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })}
+                />
+              )}
             </div>
             <div>
               <label className="label">Vigencia hasta (opcional)</label>
@@ -221,12 +268,16 @@ export default function ClienteDetailPage() {
                 value={form.fechaFin}
                 onChange={(e) => setForm({ ...form, fechaFin: e.target.value })}
               />
+              <p className="text-xs text-navy/40 mt-1">
+                Dejalo vacío para cobertura indefinida/continua. Solo poné fecha si de verdad se sabe que termina un
+                día puntual.
+              </p>
             </div>
             <div className="sm:col-span-2 flex gap-2">
               <button className="btn-primary" type="submit" disabled={form.diasSemana.length === 0}>
-                Crear y generar turnos
+                {editId ? "Guardar cambios" : "Crear y generar turnos"}
               </button>
-              <button className="btn-ghost" type="button" onClick={() => setShowForm(false)}>
+              <button className="btn-ghost" type="button" onClick={cancelarForm}>
                 Cancelar
               </button>
             </div>
@@ -267,11 +318,16 @@ export default function ClienteDetailPage() {
                     {a.activa ? "Activa" : "Finalizada"}
                   </span>
                 </td>
-                <td className="p-2 text-right">
+                <td className="p-2 text-right whitespace-nowrap">
                   {a.activa && (
-                    <button className="text-red-500 hover:underline" onClick={() => finalizarAsignacion(a.id)}>
-                      Finalizar
-                    </button>
+                    <>
+                      <button className="text-teal hover:underline mr-3" onClick={() => startEditAsignacion(a)}>
+                        Editar
+                      </button>
+                      <button className="text-red-500 hover:underline" onClick={() => finalizarAsignacion(a.id)}>
+                        Finalizar
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>
