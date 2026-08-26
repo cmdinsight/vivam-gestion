@@ -26,6 +26,7 @@ type PlanCfg = {
   costoCuidadorMes: string;
   cupoProcederesMes: number;
   alertaAnual: boolean;
+  alertaSemestral: boolean;
 };
 
 type ModalidadCfg = { modalidad: string; descuentoPct: string };
@@ -139,7 +140,13 @@ export default function ClientesPage() {
   const modCfg = modalidades.find((m) => m.modalidad === form.modalidad);
   const precioCalculado =
     planCfg && modCfg ? Math.round(parseFloat(planCfg.precioBase) * (1 - parseFloat(modCfg.descuentoPct) / 100)) : null;
-  const mostrarAlerta = !esPorHora && !!planCfg?.alertaAnual && form.modalidad === "ANUAL";
+  // debeAlertarMargen() vive en lib/planes.ts junto a código que usa Prisma;
+  // se replica la misma condición acá en vez de importarlo para no arrastrar
+  // el cliente de Prisma al bundle del navegador.
+  const mostrarAlerta =
+    !esPorHora &&
+    ((!!planCfg?.alertaAnual && form.modalidad === "ANUAL") ||
+      (!!planCfg?.alertaSemestral && form.modalidad === "SEMESTRAL"));
 
   return (
     <div className="space-y-4">
@@ -283,8 +290,9 @@ export default function ClientesPage() {
           )}
           {mostrarAlerta && (
             <div className="sm:col-span-2 rounded-lg border-l-4 border-red-400 bg-red-50 p-3 text-sm text-red-700">
-              ⚠️ Este plan en modalidad Anual cae a un margen bajo (~24,8%, zona ámbar/rojo). No se debe ofrecer
-              proactivamente — solo cerrarlo así si el cliente lo negocia explícitamente. La venta no está bloqueada.
+              ⚠️ Este plan en modalidad {MODALIDAD_LABELS[form.modalidad]} cae a un margen bajo (zona ámbar/rojo una
+              vez descontados cuidador, enfermería y guardia médica). No se debe ofrecer proactivamente — solo
+              cerrarlo así si el cliente lo negocia explícitamente. La venta no está bloqueada.
             </div>
           )}
           <div>

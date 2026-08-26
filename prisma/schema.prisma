@@ -60,6 +60,8 @@ model Cliente {
   cobros              Cobro[]
   asignaciones        AsignacionFija[]
   turnos              Turno[]
+  notasGuardia        NotaGuardia[]
+  procederes          ProcederEjecutado[]
 }
 
 enum EstadoCobro {
@@ -228,6 +230,10 @@ model PlanConfig {
   cupoProcederesMes Int
   // Si true, se advierte (sin bloquear) al contratar este plan en modalidad ANUAL
   alertaAnual       Boolean        @default(false)
+  // Ídem para SEMESTRAL. Se agregó al incorporar los costos de enfermería y
+  // guardia médica: con el modelo completo, el semestral también cae por
+  // debajo del piso de margen en casi todos los planes.
+  alertaSemestral   Boolean        @default(false)
   updatedAt         DateTime       @updatedAt
 }
 
@@ -256,4 +262,188 @@ model ExtraServicio {
   descripcion  String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MÓDULO DIRECCIÓN MÉDICA Y ENFERMERÍA (profesionales facturadores)
+//
+// Un Profesional NO es un Trabajador. Trabajador modela al cuidador
+// dependiente, con BPS/BSE/aguinaldo/licencia y liquidación laboral.
+// Un Profesional factura a Vivam: emite factura contra un total liquidado,
+// no genera cargas sociales, licencia ni aguinaldo. Por eso van separados —
+// mezclarlos metería a médicos y enfermeros dentro de procesarMes() y del
+// cálculo de provisiones, donde no corresponden.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum RolProfesional {
+  MEDICO
+  ENFERMERO
+}
+
+enum EstadoProfesional {
+  ACTIVO
+  INACTIVO
+}
+
+model Profesional {
+  id              String            @id @default(cuid())
+  nombre          String
+  rol             RolProfesional
+  especialidad    String?
+  contacto        String?
+  cajaProfesional String?
+  rutMonotributo  String?
+  // Innegociable antes de asignarle un paciente. Si está vencido o vacío,
+  // la UI lo marca en rojo.
+  seguroRcVence   DateTime?
+  cuentaBancaria  String?
+  // Solo médicos: base mensual por disponibilidad y tope de liquidación.
+  // Si quedan en null se usan los valores de ConfiguracionFacturadores.
+  baseMensual     Decimal?          @db.Decimal(12, 2)
+  topeMensual     Decimal?          @db.Decimal(12, 2)
+  // Solo enfermeros: % del valor de lista del proceder que cobra.
+  // Si queda en null se usa el de ConfiguracionFacturadores.
+  pctProceder     Decimal?          @db.Decimal(5, 2)
+  zonas           String?
+  estado          EstadoProfesional @default(ACTIVO)
+  notas           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  notasGuardia    NotaGuardia[]
+  procederes      ProcederEjecutado[]
+  turnosTitular   TurnoGuardia[]          @relation("GuardiaTitular")
+  turnosBackup    TurnoGuardia[]          @relation("GuardiaBackup")
+  liquidaciones   LiquidacionFacturador[]
+
+  @@index([rol, estado])
+}
+
+enum TipoLlamada {
+  PROGRAMADA
+  GUARDIA
+  EMERGENCIA
+}
+
+enum QuienLlama {
+  CUIDADOR
+  ENFERMERO
+  FAMILIAR
+}
+
+// Registro de cada consulta telefónica atendida por el médico de guardia.
+// REGLA DE NEGOCIO: si notaCargada = false, montoLiquidado queda en 0 y la
+// llamada no entra en la liquidación del médico. Sin nota en la historia
+// clínica, la llamada no se paga.
+model NotaGuardia {
+  id               String       @id @default(cuid())
+  fecha            DateTime
+  mes              String
+  medicoId         String
+  medico           Profesional  @relation(fields: [medicoId], references: [id], onDelete: Cascade)
+  clienteId        String?
+  cliente          Cliente?     @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  quienLlama       QuienLlama
+  tipo             TipoLlamada
+  motivo           String
+  datosObjetivos   String?
+  valoracion       String?
+  conducta         String?
+  signosAlarma     String?
+  derivoEmergencia Boolean      @default(false)
+  avisoFamilia     Boolean      @default(false)
+  notaCargada      Boolean      @default(false)
+  cargadaEn        DateTime?
+  montoLiquidado   Decimal      @db.Decimal(12, 2) @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  procederes       ProcederEjecutado[]
+
+  @@index([mes, medicoId])
+  @@index([clienteId, fecha])
+}
+
+// Cada proceder de enfermería ejecutado. El nº del mes por paciente, si entra
+// o no en el cupo del plan, lo que se le cobra al cliente y lo que se le paga
+// al enfermero se calculan al registrarlo y quedan congelados en la fila.
+model ProcederEjecutado {
+  id             String       @id @default(cuid())
+  fecha          DateTime
+  mes            String
+  clienteId      String
+  cliente        Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  enfermeroId    String
+  enfermero      Profesional  @relation(fields: [enfermeroId], references: [id], onDelete: Cascade)
+  proceder       String
+  notaGuardiaId  String?
+  notaGuardia    NotaGuardia? @relation(fields: [notaGuardiaId], references: [id], onDelete: SetNull)
+  plan           PlanContratado?
+  numeroDelMes   Int
+  cupoPlan       Int
+  dentroDeCupo   Boolean
+  montoCliente   Decimal      @db.Decimal(12, 2)
+  montoEnfermero Decimal      @db.Decimal(12, 2)
+  facturado      Boolean      @default(false)
+  notas          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([mes, enfermeroId])
+  @@index([clienteId, mes])
+}
+
+// Quién está a la orden cada mes. El backup no es opcional en la práctica:
+// sin backup no se puede sostener la promesa de respaldo 24/7.
+model TurnoGuardia {
+  id              String       @id @default(cuid())
+  mes             String
+  bloque          String
+  medicoTitularId String
+  medicoTitular   Profesional  @relation("GuardiaTitular", fields: [medicoTitularId], references: [id], onDelete: Cascade)
+  medicoBackupId  String?
+  medicoBackup    Profesional? @relation("GuardiaBackup", fields: [medicoBackupId], references: [id], onDelete: SetNull)
+  franjaHoraria   String       @default("24/7")
+  notas           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([mes, bloque])
+}
+
+// Cierre mensual de un profesional facturador. Idempotente por profesional+mes.
+model LiquidacionFacturador {
+  id              String      @id @default(cuid())
+  profesionalId   String
+  profesional     Profesional @relation(fields: [profesionalId], references: [id], onDelete: Cascade)
+  mes             String
+  base            Decimal     @db.Decimal(12, 2) @default(0)
+  variable        Decimal     @db.Decimal(12, 2) @default(0)
+  cantidadEventos Int         @default(0)
+  subtotal        Decimal     @db.Decimal(12, 2) @default(0)
+  tope            Decimal?    @db.Decimal(12, 2)
+  total           Decimal     @db.Decimal(12, 2) @default(0)
+  pagado          Boolean     @default(false)
+  fechaPago       DateTime?
+  procesadoEn     DateTime    @default(now())
+
+  @@unique([profesionalId, mes])
+}
+
+// Parámetros económicos del módulo. Fila única (id = 1), igual que Configuracion.
+model ConfiguracionFacturadores {
+  id                  Int      @id @default(1)
+  // Médico de guardia
+  baseMensualMedico   Decimal  @db.Decimal(12, 2) @default(8000)
+  tarifaProgramada    Decimal  @db.Decimal(12, 2) @default(400)
+  tarifaGuardia       Decimal  @db.Decimal(12, 2) @default(700)
+  tarifaEmergencia    Decimal  @db.Decimal(12, 2) @default(1200)
+  topeMensualMedico   Decimal  @db.Decimal(12, 2) @default(25000)
+  // Enfermería. precioProcederSinIva es la fuente de verdad del módulo:
+  // de acá salen tanto lo que se le cobra al cliente por un proceder fuera
+  // de cupo como lo que se le paga al enfermero (pctEnfermero sobre este valor).
+  pctEnfermero        Decimal  @db.Decimal(5, 2) @default(50)
+  precioProcederSinIva Decimal @db.Decimal(12, 2) @default(1500)
+  updatedAt           DateTime @updatedAt
 }
