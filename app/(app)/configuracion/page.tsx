@@ -11,7 +11,11 @@ type Config = {
   licenciaPct: string;
   tarifaHoraDiurna: string;
   tarifaHoraNocturna: string;
+  tarifaHoraClienteDiurna: string;
+  tarifaHoraClienteNocturna: string;
 };
+
+const IVA_TARIFA_HORA_PCT = 10;
 
 type PlanCfg = {
   plan: string;
@@ -60,6 +64,8 @@ export default function ConfiguracionPage() {
         licenciaPct: parseFloat(cfg.licenciaPct),
         tarifaHoraDiurna: parseFloat(cfg.tarifaHoraDiurna),
         tarifaHoraNocturna: parseFloat(cfg.tarifaHoraNocturna),
+        tarifaHoraClienteDiurna: parseFloat(cfg.tarifaHoraClienteDiurna),
+        tarifaHoraClienteNocturna: parseFloat(cfg.tarifaHoraClienteNocturna),
       }),
     });
     setMsgCfg(res.ok ? "Configuración guardada." : "Error al guardar.");
@@ -180,6 +186,32 @@ export default function ConfiguracionPage() {
               onChange={(e) => setCfg({ ...cfg, tarifaHoraNocturna: e.target.value })}
             />
           </div>
+          <div className="sm:col-span-2 border-t border-navy/10 pt-4">
+            <p className="label mb-2">
+              Tarifa por hora al cliente, sin plan mensual (precio sin IVA — el IVA se aplica fijo al{" "}
+              {IVA_TARIFA_HORA_PCT}%, no editable)
+            </p>
+          </div>
+          <div>
+            <label className="label">Diurna, 06:00-20:00 ($/hora, sin IVA)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              value={cfg.tarifaHoraClienteDiurna}
+              onChange={(e) => setCfg({ ...cfg, tarifaHoraClienteDiurna: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Nocturna, 20:00-06:00 ($/hora, sin IVA)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              value={cfg.tarifaHoraClienteNocturna}
+              onChange={(e) => setCfg({ ...cfg, tarifaHoraClienteNocturna: e.target.value })}
+            />
+          </div>
           {msgCfg && <p className="text-sm text-teal sm:col-span-2">{msgCfg}</p>}
           <div className="sm:col-span-2">
             <button className="btn-primary" type="submit">
@@ -191,6 +223,45 @@ export default function ConfiguracionPage() {
           Para cuidadores por hora, el sueldo nominal se despeja de la tarifa fija: sueldo nominal = costo total ÷ (1
           + BPS + BSE + aguinaldo + licencia). El costo total por hora (diurna/nocturna) nunca cambia al ajustar los
           %, sólo cambia cómo se reparte internamente entre sueldo y cargas.
+        </p>
+
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-navy/10 text-navy/60">
+                <th className="p-2">Modalidad</th>
+                <th className="p-2">Precio/hora (sin IVA)</th>
+                <th className="p-2">+ IVA {IVA_TARIFA_HORA_PCT}%</th>
+                <th className="p-2">Total final cliente</th>
+                <th className="p-2">Costo cuidador</th>
+                <th className="p-2">Margen bruto $</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: "Hora diurna (06:00-20:00)", precio: cfg.tarifaHoraClienteDiurna, costo: cfg.tarifaHoraDiurna },
+                { label: "Hora nocturna (20:00-06:00)", precio: cfg.tarifaHoraClienteNocturna, costo: cfg.tarifaHoraNocturna },
+              ].map((row) => {
+                const precio = parseFloat(row.precio) || 0;
+                const costo = parseFloat(row.costo) || 0;
+                const iva = precio * (IVA_TARIFA_HORA_PCT / 100);
+                const total = precio + iva;
+                return (
+                  <tr key={row.label} className="border-b border-navy/5">
+                    <td className="p-2 font-semibold">{row.label}</td>
+                    <td className="p-2">${precio.toFixed(0)}</td>
+                    <td className="p-2">${iva.toFixed(0)}</td>
+                    <td className="p-2">${total.toFixed(0)}</td>
+                    <td className="p-2 text-teal">${costo.toFixed(0)}</td>
+                    <td className="p-2 text-teal">${(precio - costo).toFixed(0)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-navy/40">
+          Mínimo recomendado por visita: 4 horas. Por debajo, el costo logístico del cuidador no se cubre.
         </p>
       </section>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { money, dateInput, PLAN_LABELS, MODALIDAD_LABELS, ESTADO_CLIENTE_LABELS } from "@/lib/format";
+import { money, dateInput, PLAN_LABELS, MODALIDAD_LABELS, FACTURACION_LABELS, ESTADO_CLIENTE_LABELS } from "@/lib/format";
 
 type Cliente = {
   id: string;
@@ -10,9 +10,10 @@ type Cliente = {
   familiaResponsable: string;
   contacto: string | null;
   zona: string | null;
-  plan: string;
+  facturacion: string;
+  plan: string | null;
   fechaInicio: string;
-  modalidad: string;
+  modalidad: string | null;
   precioMensual: string;
   estado: string;
   notas: string | null;
@@ -29,11 +30,16 @@ type PlanCfg = {
 
 type ModalidadCfg = { modalidad: string; descuentoPct: string };
 
+type ConfigTarifas = { tarifaHoraClienteDiurna: string; tarifaHoraClienteNocturna: string };
+
+const IVA_PCT = 10;
+
 const EMPTY = {
   nombrePaciente: "",
   familiaResponsable: "",
   contacto: "",
   zona: "",
+  facturacion: "PLAN_MENSUAL",
   plan: "ESENCIAL_LUNES_VIERNES",
   fechaInicio: dateInput(new Date()),
   modalidad: "MENSUAL",
@@ -57,6 +63,7 @@ export default function ClientesPage() {
   const [filtro, setFiltro] = useState("");
   const [planes, setPlanes] = useState<PlanCfg[]>([]);
   const [modalidades, setModalidades] = useState<ModalidadCfg[]>([]);
+  const [tarifas, setTarifas] = useState<ConfigTarifas | null>(null);
 
   function load() {
     setLoading(true);
@@ -76,6 +83,9 @@ export default function ClientesPage() {
         setPlanes(d.planes);
         setModalidades(d.modalidades);
       });
+    fetch("/api/configuracion")
+      .then((r) => r.json())
+      .then(setTarifas);
   }, []);
 
   function startNew() {
@@ -91,9 +101,10 @@ export default function ClientesPage() {
       familiaResponsable: c.familiaResponsable,
       contacto: c.contacto || "",
       zona: c.zona || "",
-      plan: c.plan,
+      facturacion: c.facturacion,
+      plan: c.plan || "ESENCIAL_LUNES_VIERNES",
       fechaInicio: dateInput(c.fechaInicio),
-      modalidad: c.modalidad,
+      modalidad: c.modalidad || "MENSUAL",
       estado: c.estado,
       notas: c.notas || "",
     });
@@ -123,11 +134,12 @@ export default function ClientesPage() {
     `${c.nombrePaciente} ${c.familiaResponsable} ${c.zona ?? ""}`.toLowerCase().includes(filtro.toLowerCase())
   );
 
+  const esPorHora = form.facturacion === "POR_HORA";
   const planCfg = planes.find((p) => p.plan === form.plan);
   const modCfg = modalidades.find((m) => m.modalidad === form.modalidad);
   const precioCalculado =
     planCfg && modCfg ? Math.round(parseFloat(planCfg.precioBase) * (1 - parseFloat(modCfg.descuentoPct) / 100)) : null;
-  const mostrarAlerta = !!planCfg?.alertaAnual && form.modalidad === "ANUAL";
+  const mostrarAlerta = !esPorHora && !!planCfg?.alertaAnual && form.modalidad === "ANUAL";
 
   return (
     <div className="space-y-4">
@@ -182,35 +194,75 @@ export default function ClientesPage() {
             <label className="label">Zona</label>
             <input className="input" value={form.zona} onChange={(e) => setForm({ ...form, zona: e.target.value })} />
           </div>
-          <div>
-            <label className="label">Plan contratado</label>
-            <select className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}>
-              {Object.entries(PLAN_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
+          <div className="sm:col-span-2">
+            <label className="label">Modo de facturación</label>
+            <div className="flex gap-2">
+              {(["PLAN_MENSUAL", "POR_HORA"] as const).map((f) => (
+                <button
+                  type="button"
+                  key={f}
+                  onClick={() => setForm({ ...form, facturacion: f })}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold border ${
+                    form.facturacion === f ? "bg-teal text-white border-teal" : "border-navy/20 text-navy/60"
+                  }`}
+                >
+                  {FACTURACION_LABELS[f]}
+                </button>
               ))}
-            </select>
-            {planCfg && (
-              <p className="text-xs text-navy/50 mt-1">
-                {planCfg.horasMes} h/mes · {planCfg.cupoProcederesMes} procederes/mes
+            </div>
+          </div>
+
+          {esPorHora ? (
+            <div className="sm:col-span-2 rounded-lg border border-navy/10 bg-navy/[0.03] p-3 text-sm space-y-1">
+              <p className="font-semibold text-navy">
+                Tarifa por hora sin plan (uso típico: cobertura puntual, post-operatorios cortos)
               </p>
-            )}
-          </div>
-          <div>
-            <label className="label">Modalidad de compromiso</label>
-            <select
-              className="input"
-              value={form.modalidad}
-              onChange={(e) => setForm({ ...form, modalidad: e.target.value })}
-            >
-              {Object.entries(MODALIDAD_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
+              {tarifas && (
+                <p className="text-navy/70">
+                  Diurna 06:00-20:00: {money(parseFloat(tarifas.tarifaHoraClienteDiurna) * (1 + IVA_PCT / 100))} c/IVA
+                  ({money(tarifas.tarifaHoraClienteDiurna)} + {IVA_PCT}% IVA) · Nocturna 20:00-06:00:{" "}
+                  {money(parseFloat(tarifas.tarifaHoraClienteNocturna) * (1 + IVA_PCT / 100))} c/IVA (
+                  {money(tarifas.tarifaHoraClienteNocturna)} + {IVA_PCT}% IVA)
+                </p>
+              )}
+              <p className="text-navy/50 text-xs">
+                El monto mensual se calcula solo a partir de las horas reales trabajadas (turnos). Mínimo recomendado
+                por visita: 4 horas — por debajo no se cubre el costo logístico del cuidador.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="label">Plan contratado</label>
+                <select className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}>
+                  {Object.entries(PLAN_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+                {planCfg && (
+                  <p className="text-xs text-navy/50 mt-1">
+                    {planCfg.horasMes} h/mes · {planCfg.cupoProcederesMes} procederes/mes
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="label">Modalidad de compromiso</label>
+                <select
+                  className="input"
+                  value={form.modalidad}
+                  onChange={(e) => setForm({ ...form, modalidad: e.target.value })}
+                >
+                  {Object.entries(MODALIDAD_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
           <div>
             <label className="label">Fecha de inicio</label>
             <input
@@ -221,12 +273,14 @@ export default function ClientesPage() {
               onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })}
             />
           </div>
-          <div>
-            <label className="label">Precio mensual (calculado automáticamente)</label>
-            <div className="input bg-navy/5 font-semibold text-navy">
-              {precioCalculado !== null ? money(precioCalculado) : "—"}
+          {!esPorHora && (
+            <div>
+              <label className="label">Precio mensual (calculado automáticamente)</label>
+              <div className="input bg-navy/5 font-semibold text-navy">
+                {precioCalculado !== null ? money(precioCalculado) : "—"}
+              </div>
             </div>
-          </div>
+          )}
           {mostrarAlerta && (
             <div className="sm:col-span-2 rounded-lg border-l-4 border-red-400 bg-red-50 p-3 text-sm text-red-700">
               ⚠️ Este plan en modalidad Anual cae a un margen bajo (~24,8%, zona ámbar/rojo). No se debe ofrecer
@@ -289,8 +343,8 @@ export default function ClientesPage() {
                   </td>
                   <td className="p-3">{c.familiaResponsable}</td>
                   <td className="p-3">{c.zona}</td>
-                  <td className="p-3">{PLAN_LABELS[c.plan]}</td>
-                  <td className="p-3">{money(c.precioMensual)}</td>
+                  <td className="p-3">{c.plan ? PLAN_LABELS[c.plan] : "Por hora (sin plan)"}</td>
+                  <td className="p-3">{c.facturacion === "POR_HORA" ? "Según turnos" : money(c.precioMensual)}</td>
                   <td className="p-3">
                     <span className={`badge ${ESTADO_COLOR[c.estado]}`}>{ESTADO_CLIENTE_LABELS[c.estado]}</span>
                   </td>

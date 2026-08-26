@@ -17,6 +17,8 @@ export async function getConfiguracion() {
       licenciaPct: 8.33,
       tarifaHoraDiurna: 230,
       tarifaHoraNocturna: 273,
+      tarifaHoraClienteDiurna: 350,
+      tarifaHoraClienteNocturna: 455,
     },
   });
 }

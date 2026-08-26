@@ -19,6 +19,8 @@ export async function PUT(req: NextRequest) {
     licenciaPct: body.licenciaPct,
     tarifaHoraDiurna: body.tarifaHoraDiurna,
     tarifaHoraNocturna: body.tarifaHoraNocturna,
+    tarifaHoraClienteDiurna: body.tarifaHoraClienteDiurna,
+    tarifaHoraClienteNocturna: body.tarifaHoraClienteNocturna,
   };
   const cfg = await prisma.configuracion.upsert({
     where: { id: 1 },

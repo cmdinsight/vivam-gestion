@@ -15,7 +15,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json();
-  const { precio } = await calcularPrecioCliente(body.plan, body.modalidad);
+  const porHora = body.facturacion === "POR_HORA";
+  const precio = porHora ? 0 : (await calcularPrecioCliente(body.plan, body.modalidad)).precio;
   const cliente = await prisma.cliente.update({
     where: { id: params.id },
     data: {
@@ -23,9 +24,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       familiaResponsable: body.familiaResponsable,
       contacto: body.contacto || null,
       zona: body.zona || null,
-      plan: body.plan,
+      facturacion: porHora ? "POR_HORA" : "PLAN_MENSUAL",
+      plan: porHora ? null : body.plan,
       fechaInicio: new Date(body.fechaInicio),
-      modalidad: body.modalidad,
+      modalidad: porHora ? null : body.modalidad,
       precioMensual: precio,
       estado: body.estado,
       notas: body.notas || null,

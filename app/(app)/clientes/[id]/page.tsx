@@ -19,7 +19,7 @@ type Cliente = {
   id: string;
   nombrePaciente: string;
   familiaResponsable: string;
-  plan: string;
+  plan: string | null;
   estado: string;
 };
 
@@ -133,7 +133,7 @@ export default function ClienteDetailPage() {
       <div>
         <h1 className="font-display text-2xl">{cliente.nombrePaciente}</h1>
         <p className="text-navy/60 text-sm">
-          {cliente.familiaResponsable} · {PLAN_LABELS[cliente.plan]} ·{" "}
+          {cliente.familiaResponsable} · {cliente.plan ? PLAN_LABELS[cliente.plan] : "Por hora (sin plan)"} ·{" "}
           <span className="font-semibold">{ESTADO_CLIENTE_LABELS[cliente.estado]}</span>
         </p>
       </div>

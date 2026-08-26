@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { toCsv, csvResponse } from "@/lib/csv";
-import { PLAN_LABELS, MODALIDAD_LABELS, ESTADO_CLIENTE_LABELS, ESTADO_COBRO_LABELS, dateInput } from "@/lib/format";
+import { PLAN_LABELS, MODALIDAD_LABELS, FACTURACION_LABELS, ESTADO_CLIENTE_LABELS, ESTADO_COBRO_LABELS, dateInput } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +16,11 @@ export async function GET(req: NextRequest, { params }: { params: { modulo: stri
         Familia: c.familiaResponsable,
         Contacto: c.contacto,
         Zona: c.zona,
-        Plan: PLAN_LABELS[c.plan],
+        Facturacion: FACTURACION_LABELS[c.facturacion],
+        Plan: c.plan ? PLAN_LABELS[c.plan] : "",
         FechaInicio: dateInput(c.fechaInicio),
-        Modalidad: MODALIDAD_LABELS[c.modalidad],
-        PrecioMensual: c.precioMensual.toString(),
+        Modalidad: c.modalidad ? MODALIDAD_LABELS[c.modalidad] : "",
+        PrecioMensual: c.facturacion === "POR_HORA" ? "Según turnos" : c.precioMensual.toString(),
         Estado: ESTADO_CLIENTE_LABELS[c.estado],
       }));
       const csv = toCsv(rows, Object.keys(rows[0] ?? { Paciente: "" }));

@@ -51,6 +51,11 @@ export const MODALIDAD_LABELS: Record<string, string> = {
   ANUAL: "Anual",
 };
 
+export const FACTURACION_LABELS: Record<string, string> = {
+  PLAN_MENSUAL: "Plan mensual",
+  POR_HORA: "Por hora (sin plan)",
+};
+
 export const ESTADO_CLIENTE_LABELS: Record<string, string> = {
   PROSPECTO: "Prospecto",
   ACTIVO: "Activo",

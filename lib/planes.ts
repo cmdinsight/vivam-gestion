@@ -1,7 +1,13 @@
 import { prisma } from "./prisma";
 import { Prisma, PlanContratado, Modalidad } from "@prisma/client";
+import { getConfiguracion } from "./payroll";
+import { esDiurno } from "./turnos";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
+
+// IVA fijo para la tarifa por hora sin plan (no editable, a diferencia de las
+// demás tasas de Configuración).
+export const IVA_TARIFA_HORA_PCT = 10;
 
 // precioBase = precio de tarifa llena (100%), calculado de forma que
 // precioBase * (1 - 5%) = el "Total cliente" de la modalidad mensual rotativo
@@ -65,4 +71,41 @@ export async function calcularPrecioCliente(plan: PlanContratado, modalidad: Mod
 
 export function debeAlertarMargen(planCfg: { alertaAnual: boolean }, modalidad: Modalidad) {
   return planCfg.alertaAnual && modalidad === "ANUAL";
+}
+
+/**
+ * Calcula el monto a cobrar a un cliente facturado "por hora sin plan" para un
+ * mes dado, a partir de sus Turnos reales (diurnos/nocturnos, excluyendo
+ * NO_TRABAJADO) por la tarifa de cliente vigente + IVA fijo del 10%.
+ */
+export async function calcularMontoPorHora(clienteId: string, mes: string) {
+  const [turnos, cfg] = await Promise.all([
+    prisma.turno.findMany({
+      where: { clienteId, mes, estado: { not: "NO_TRABAJADO" } },
+      select: { horas: true, horaInicio: true },
+    }),
+    getConfiguracion(),
+  ]);
+
+  let horasDiurnas = D(0);
+  let horasNocturnas = D(0);
+  let subtotal = D(0);
+  for (const t of turnos) {
+    if (esDiurno(t.horaInicio)) {
+      horasDiurnas = horasDiurnas.add(t.horas);
+      subtotal = subtotal.add(D(t.horas).mul(cfg.tarifaHoraClienteDiurna));
+    } else {
+      horasNocturnas = horasNocturnas.add(t.horas);
+      subtotal = subtotal.add(D(t.horas).mul(cfg.tarifaHoraClienteNocturna));
+    }
+  }
+
+  const iva = subtotal.mul(IVA_TARIFA_HORA_PCT).div(100);
+  return {
+    horasDiurnas,
+    horasNocturnas,
+    subtotal,
+    iva,
+    total: Math.round(subtotal.add(iva).toNumber()),
+  };
 }
