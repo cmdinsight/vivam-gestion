@@ -8,6 +8,10 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/setup") ||
     pathname.startsWith("/api/auth/login") ||
     pathname.startsWith("/api/setup") ||
+    // Temporal: se revierte en el próximo commit apenas se confirma que
+    // /api/admin/actualizar-precios corrió bien. La ruta igual exige su
+    // propio token, esto solo la saca del chequeo de sesión de usuario.
+    pathname.startsWith("/api/admin/actualizar-precios") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon")
   ) {
