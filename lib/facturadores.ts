@@ -60,6 +60,16 @@ export async function montoDeNota(tipo: TipoLlamada, notaCargada: boolean) {
 }
 
 /**
+ * Monto que se le liquida al médico por hacer la valoración inicial a
+ * domicilio. Es gratis para el cliente (no genera Cobro): la empresa la
+ * asume como costo de adquisición, no hay ingreso que la compense.
+ */
+export async function montoDeValoracion() {
+  const cfg = await getConfigFacturadores();
+  return D(cfg.precioValoracionInicial);
+}
+
+/**
  * Registra un proceder de enfermería resolviendo, en una transacción:
  *  - qué número de proceder del mes es para ese paciente
  *  - el cupo del plan que tiene contratado
@@ -188,12 +198,20 @@ export async function calcularLiquidacionFacturador(profesionalId: string, mes: 
   ]);
 
   if (profesional.rol === "MEDICO") {
-    const notas = await prisma.notaGuardia.findMany({
-      where: { medicoId: profesionalId, mes, notaCargada: true },
-      select: { montoLiquidado: true, tipo: true },
-    });
+    const [notas, valoraciones] = await Promise.all([
+      prisma.notaGuardia.findMany({
+        where: { medicoId: profesionalId, mes, notaCargada: true },
+        select: { montoLiquidado: true, tipo: true },
+      }),
+      prisma.valoracionInicial.findMany({
+        where: { medicoId: profesionalId, mes },
+        select: { montoLiquidado: true },
+      }),
+    ]);
     const base = D(profesional.baseMensual ?? cfg.baseMensualMedico);
-    const variable = notas.reduce((acc, n) => acc.add(n.montoLiquidado), D(0));
+    const variableNotas = notas.reduce((acc, n) => acc.add(n.montoLiquidado), D(0));
+    const variableValoraciones = valoraciones.reduce((acc, v) => acc.add(v.montoLiquidado), D(0));
+    const variable = variableNotas.add(variableValoraciones);
     const subtotal = base.add(variable);
     const tope = D(profesional.topeMensual ?? cfg.topeMensualMedico);
     const total = subtotal.greaterThan(tope) ? tope : subtotal;
@@ -206,7 +224,7 @@ export async function calcularLiquidacionFacturador(profesionalId: string, mes: 
       profesional,
       base,
       variable,
-      cantidadEventos: notas.length,
+      cantidadEventos: notas.length + valoraciones.length,
       subtotal,
       tope,
       total,
@@ -216,6 +234,8 @@ export async function calcularLiquidacionFacturador(profesionalId: string, mes: 
         programadas: notas.filter((n) => n.tipo === "PROGRAMADA").length,
         guardia: notas.filter((n) => n.tipo === "GUARDIA").length,
         emergencia: notas.filter((n) => n.tipo === "EMERGENCIA").length,
+        valoracionesIniciales: valoraciones.length,
+        montoValoraciones: variableValoraciones,
       },
     };
   }
@@ -308,10 +328,22 @@ export async function resumenFacturadoresMes(
     where: { estado: "ACTIVO", OR: [{ seguroRcVence: null }, { seguroRcVence: { lt: new Date() } }] },
   });
 
+  // Se muestra aparte del resto del costo de médicos porque no tiene ningún
+  // ingreso que lo compense (la valoración es gratis para el cliente): es
+  // pérdida inicial pura, asumida como costo de adquisición del cliente.
+  const valoracionesDelMes = await prisma.valoracionInicial.aggregate({
+    where: { mes },
+    _sum: { montoLiquidado: true },
+    _count: true,
+  });
+  const costoValoraciones = valoracionesDelMes._sum.montoLiquidado ?? D(0);
+
   return {
     costoMedicos,
     costoEnfermeros,
     costoTotal: costoMedicos.add(costoEnfermeros),
+    costoValoraciones,
+    cantidadValoraciones: valoracionesDelMes._count,
     facturadoProcederes,
     pagadoProcederes,
     // Negativo es lo esperable al principio: el cupo incluido es costo de adquisición.

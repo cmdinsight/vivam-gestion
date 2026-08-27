@@ -143,6 +143,8 @@ export async function GET(req: NextRequest) {
     pctMargen,
     costoCuidadores,
     costoFacturadores,
+    costoValoraciones: facturadores.costoValoraciones,
+    cantidadValoraciones: facturadores.cantidadValoraciones,
     costoTotalEmpresa,
     clientesActivos,
     ingresoPromedioCliente,

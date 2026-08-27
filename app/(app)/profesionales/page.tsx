@@ -26,6 +26,7 @@ type Config = {
   tarifaGuardia: string;
   tarifaEmergencia: string;
   topeMensualMedico: string;
+  precioValoracionInicial: string;
   pctEnfermero: string;
   precioProcederSinIva: string;
 };
@@ -36,6 +37,7 @@ const CAMPOS_CONFIG: { key: keyof Config; label: string }[] = [
   { key: "tarifaGuardia", label: "Consulta de guardia" },
   { key: "tarifaEmergencia", label: "Emergencia" },
   { key: "topeMensualMedico", label: "Tope mensual del médico" },
+  { key: "precioValoracionInicial", label: "Valoración inicial a domicilio (gratis al cliente)" },
   { key: "pctEnfermero", label: "% del proceder al enfermero" },
   { key: "precioProcederSinIva", label: "Precio del proceder (sin IVA)" },
 ];

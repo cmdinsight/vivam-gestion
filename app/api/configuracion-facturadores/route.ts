@@ -20,6 +20,7 @@ export async function PUT(req: NextRequest) {
       tarifaGuardia: body.tarifaGuardia,
       tarifaEmergencia: body.tarifaEmergencia,
       topeMensualMedico: body.topeMensualMedico,
+      precioValoracionInicial: body.precioValoracionInicial,
       pctEnfermero: body.pctEnfermero,
       precioProcederSinIva: body.precioProcederSinIva,
     },

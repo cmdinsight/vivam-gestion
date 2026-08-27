@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { TIPO_LLAMADA_LABELS, QUIEN_LLAMA_LABELS } from "@/lib/format";
+import { TIPO_LLAMADA_LABELS, QUIEN_LLAMA_LABELS, PLAN_LABELS } from "@/lib/format";
 
 type Cliente = {
   id: string;
   nombrePaciente: string;
   familiaResponsable: string;
   contacto: string | null;
+  plan: string | null;
 };
 
 type NotaGuardia = {
@@ -18,7 +19,9 @@ type NotaGuardia = {
   quienLlama: string;
   tipo: string;
   motivo: string;
+  datosObjetivos: string | null;
   valoracion: string | null;
+  conducta: string | null;
   derivoEmergencia: boolean;
   avisoFamilia: boolean;
   notaCargada: boolean;
@@ -33,17 +36,34 @@ type Proceder = {
   enfermero: { nombre: string };
 };
 
+type ReporteDiario = {
+  id: string;
+  fecha: string;
+  estadoGeneral: string | null;
+  animo: string | null;
+  alimentacion: string | null;
+  medicacionAdministrada: string | null;
+  movilidad: string | null;
+  higiene: string | null;
+  observaciones: string | null;
+  trabajador: { nombre: string };
+};
+
+type PlanCfg = { plan: string; cupoProcederesMes: number };
+
 type Evento =
   | { tipo: "NOTA"; fecha: string; data: NotaGuardia }
-  | { tipo: "PROCEDER"; fecha: string; data: Proceder };
+  | { tipo: "PROCEDER"; fecha: string; data: Proceder }
+  | { tipo: "REPORTE"; fecha: string; data: ReporteDiario };
 
 type Modo = "DIA" | "SEMANA" | "MES";
 
-// Las fechas de NotaGuardia/ProcederEjecutado son solo calendario (sin hora),
-// guardadas como medianoche UTC. Todo el manejo de fechas de esta pantalla
-// trabaja con el string "YYYY-MM-DD" y con Date locales construidos a mano
-// (y/m/d), nunca con `new Date(isoConHoraUTC)` directo, porque en Uruguay
-// (UTC-3) eso corre el día un dia para atrás al mostrarlo o compararlo.
+// Las fechas de NotaGuardia/ProcederEjecutado/ReporteDiario son solo
+// calendario (sin hora), guardadas como medianoche UTC. Todo el manejo de
+// fechas de esta pantalla trabaja con el string "YYYY-MM-DD" y con Date
+// locales construidos a mano (y/m/d), nunca con `new Date(isoConHoraUTC)`
+// directo, porque en Uruguay (UTC-3) eso corre el día un dia para atrás al
+// mostrarlo o compararlo.
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
@@ -82,6 +102,16 @@ function rangoDe(modo: Modo, ref: Date): { desde: string; hasta: string } {
   return { desde: ymd(inicio), hasta: ymd(fin) };
 }
 
+// A diferencia de rangoDe (que da el recorte que se está viendo), esto da
+// siempre el mes calendario completo que contiene a `ref` — lo necesitan las
+// cifras "del mes" del resumen semanal/mensual (cupo de procederes,
+// adherencia, etc.) sin importar si estás mirando un día o una semana suelta.
+function mesCalendarioDe(ref: Date): { desde: string; hasta: string; mesStr: string } {
+  const inicio = new Date(ref.getFullYear(), ref.getMonth(), 1);
+  const fin = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+  return { desde: ymd(inicio), hasta: ymd(fin), mesStr: `${ref.getFullYear()}-${pad(ref.getMonth() + 1)}` };
+}
+
 function shiftRef(modo: Modo, ref: Date, delta: number): Date {
   const r = new Date(ref);
   if (modo === "DIA") r.setDate(r.getDate() + delta);
@@ -113,39 +143,157 @@ function telefonoSugerido(contacto: string | null): string {
   return digitos;
 }
 
-function generarResumen(cliente: Cliente, eventos: Evento[], modo: Modo, ref: Date): string {
+function bullets(lineas: string[]): string {
+  return lineas.length > 0 ? lineas.map((l) => `• ${l}`).join("\n") : "Sin datos para este período.";
+}
+
+// Arma el resumen siguiendo, seccion por seccion, las tres plantillas reales
+// de Vivam (Vivam_Formato_Resumenes_Cliente.docx). Donde hay dato real, se
+// llena solo; donde hace falta criterio clinico que un script no puede
+// inventar (cambios relevantes, cumplimiento del plan, indicadores de
+// control), se deja un placeholder para que el equipo lo complete a mano en
+// vez de fabricar contenido.
+function generarResumen(
+  cliente: Cliente,
+  eventos: Evento[],
+  modo: Modo,
+  ref: Date,
+  cupoPlan: number | null,
+  cuidadores: string[],
+  procederesUsadosMes: number
+): string {
   const notas = eventos.filter((e): e is Extract<Evento, { tipo: "NOTA" }> => e.tipo === "NOTA");
   const procederes = eventos.filter((e): e is Extract<Evento, { tipo: "PROCEDER" }> => e.tipo === "PROCEDER");
+  const reportes = eventos.filter((e): e is Extract<Evento, { tipo: "REPORTE" }> => e.tipo === "REPORTE");
+  const planLabel = cliente.plan ? PLAN_LABELS[cliente.plan] : "Por hora (sin plan)";
+  const cuidadoresTxt = cuidadores.length > 0 ? cuidadores.join(", ") : "Sin asignación activa";
 
-  let texto = `Resumen de atención — ${cliente.nombrePaciente}\n${labelRango(modo, ref)}\n\n`;
-
-  if (notas.length > 0) {
-    texto += `📞 Consultas médicas (${notas.length})\n`;
-    for (const n of notas) {
-      texto += `• ${fechaCorta(n.fecha)} — ${TIPO_LLAMADA_LABELS[n.data.tipo]}: ${n.data.motivo}`;
-      if (n.data.valoracion) texto += `. ${n.data.valoracion}`;
-      if (n.data.derivoEmergencia) texto += ` ⚠️ Derivado a emergencia`;
-      texto += `\n`;
-    }
-    texto += `\n`;
+  if (modo === "DIA") {
+    const r = reportes[0]?.data ?? null;
+    const incidentes = [
+      ...notas.filter((n) => n.data.derivoEmergencia).map((n) => n.data.motivo),
+      ...(r?.observaciones ? [r.observaciones] : []),
+    ];
+    return [
+      `Vivam · Reporte diario`,
+      fechaCorta(ymd(ref)),
+      ``,
+      `Estado general`,
+      r?.estadoGeneral || "Sin reporte cargado por el cuidador.",
+      ``,
+      `Ánimo / energía`,
+      r?.animo || "—",
+      ``,
+      `Alimentación (qué y cuánto comió)`,
+      r?.alimentacion || "—",
+      ``,
+      `Medicación administrada (horario y qué se dio)`,
+      r?.medicacionAdministrada || "—",
+      ``,
+      `Movilidad / actividad del día`,
+      r?.movilidad || "—",
+      ``,
+      `Higiene / continencia`,
+      r?.higiene || "—",
+      ``,
+      `Observaciones o incidentes`,
+      incidentes.length > 0 ? incidentes.join(". ") : "Sin novedad.",
+      ``,
+      `Cuidador`,
+      r?.trabajador.nombre || cuidadoresTxt,
+    ].join("\n");
   }
 
-  if (procederes.length > 0) {
-    texto += `💉 Procederes de enfermería (${procederes.length})\n`;
-    for (const p of procederes) {
-      texto += `• ${fechaCorta(p.fecha)} — ${p.data.proceder} (${p.data.enfermero.nombre})`;
-      if (p.data.notas) texto += `: ${p.data.notas}`;
-      texto += `\n`;
-    }
-    texto += `\n`;
+  const estadoDiario = reportes
+    .filter((r) => r.data.estadoGeneral)
+    .map((r) => `${fechaCorta(r.fecha)}: ${r.data.estadoGeneral}`);
+  const medicacionDiaria = reportes
+    .filter((r) => r.data.medicacionAdministrada)
+    .map((r) => `${fechaCorta(r.fecha)}: ${r.data.medicacionAdministrada}`);
+  const procederesTexto = procederes.map((p) => `${fechaCorta(p.fecha)}: ${p.data.proceder} (${p.data.enfermero.nombre})`);
+  const incidentesTexto = [
+    ...reportes.filter((r) => r.data.observaciones).map((r) => `${fechaCorta(r.fecha)}: ${r.data.observaciones}`),
+    ...notas.filter((n) => n.data.derivoEmergencia).map((n) => `${fechaCorta(n.fecha)}: ${n.data.motivo} (derivado a emergencia)`),
+  ];
+  const recomendaciones = notas.filter((n) => n.data.conducta).map((n) => `${fechaCorta(n.fecha)}: ${n.data.conducta}`);
+
+  if (modo === "SEMANA") {
+    const { desde, hasta } = rangoDe(modo, ref);
+    return [
+      `Vivam · Reporte semanal`,
+      `Semana del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`,
+      ``,
+      `Paciente`,
+      cliente.nombrePaciente,
+      ``,
+      `Plan contratado`,
+      planLabel,
+      ``,
+      `Estado general de la semana`,
+      bullets(estadoDiario),
+      ``,
+      `Cambios relevantes respecto a la semana anterior`,
+      "[Completar por el equipo]",
+      ``,
+      `Adherencia a la medicación`,
+      bullets(medicacionDiaria),
+      ``,
+      `Procederes de enfermería realizados esta semana`,
+      bullets(procederesTexto),
+      ``,
+      `Cupo de procederes usado / disponible del mes`,
+      cupoPlan != null ? `${procederesUsadosMes} usados de ${cupoPlan} disponibles este mes.` : "Sin plan mensual, no aplica cupo.",
+      ``,
+      `Incidentes reportados`,
+      bullets(incidentesTexto),
+      ``,
+      `Recomendaciones / próximos pasos`,
+      bullets(recomendaciones),
+      ``,
+      `Cuidador(es) asignado(s)`,
+      cuidadoresTxt,
+    ].join("\n");
   }
 
-  if (notas.length === 0 && procederes.length === 0) {
-    texto += "Sin eventos registrados en este período.\n\n";
-  }
-
-  texto += `Cualquier consulta, quedamos a disposición.\nEquipo Vivam`;
-  return texto;
+  // MES
+  const datosObjetivos = notas
+    .filter((n) => n.data.datosObjetivos)
+    .map((n) => `${fechaCorta(n.fecha)}: ${n.data.datosObjetivos}`);
+  return [
+    `Vivam · Reporte mensual`,
+    fechaLocalDesdeYmd(ymd(ref)).toLocaleDateString("es-UY", { month: "long", year: "numeric" }),
+    ``,
+    `Paciente`,
+    cliente.nombrePaciente,
+    ``,
+    `Plan contratado`,
+    planLabel,
+    ``,
+    `Evolución general del mes`,
+    bullets(estadoDiario),
+    ``,
+    `Indicadores de control (peso, presión arterial, otros si aplica)`,
+    bullets(datosObjetivos),
+    ``,
+    `Adherencia a la medicación durante el mes`,
+    bullets(medicacionDiaria),
+    ``,
+    `Procederes de enfermería del mes (usados / cupo del plan)`,
+    `${procederesUsadosMes} realizado${procederesUsadosMes === 1 ? "" : "s"}${cupoPlan != null ? ` de ${cupoPlan} disponibles.` : "."}`,
+    ...(procederesTexto.length > 0 ? [bullets(procederesTexto)] : []),
+    ``,
+    `Incidentes o emergencias del mes`,
+    bullets(incidentesTexto),
+    ``,
+    `Cumplimiento del plan de cuidado`,
+    "[Completar por el equipo]",
+    ``,
+    `Recomendaciones del equipo médico`,
+    bullets(recomendaciones),
+    ``,
+    `Observaciones de la familia (espacio para feedback)`,
+    "[Completar por el equipo]",
+  ].join("\n");
 }
 
 export default function HistoriaClinicaPage() {
@@ -153,6 +301,9 @@ export default function HistoriaClinicaPage() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [notas, setNotas] = useState<NotaGuardia[]>([]);
   const [procederes, setProcederes] = useState<Proceder[]>([]);
+  const [reportes, setReportes] = useState<ReporteDiario[]>([]);
+  const [cuidadores, setCuidadores] = useState<string[]>([]);
+  const [cupoPlan, setCupoPlan] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [modo, setModo] = useState<Modo>("SEMANA");
   const [ref, setRef] = useState(new Date());
@@ -167,11 +318,25 @@ export default function HistoriaClinicaPage() {
       fetch(`/api/clientes/${id}`).then((r) => r.json()),
       fetch(`/api/notas-guardia?clienteId=${id}`).then((r) => r.json()),
       fetch(`/api/procederes?clienteId=${id}`).then((r) => r.json()),
-    ]).then(([c, n, p]) => {
+      fetch(`/api/reportes-diarios?clienteId=${id}`).then((r) => r.json()),
+      fetch(`/api/asignaciones?clienteId=${id}`).then((r) => r.json()),
+      fetch(`/api/planes`).then((r) => r.json()),
+    ]).then(([c, n, p, r, asign, planesResp]) => {
       setCliente(c);
       setNotas(Array.isArray(n) ? n : []);
       setProcederes(Array.isArray(p) ? p : []);
+      setReportes(Array.isArray(r) ? r : []);
       setTelefono(telefonoSugerido(c?.contacto ?? null));
+
+      const nombresCuidadores: string[] = Array.isArray(asign)
+        ? [...new Set(asign.filter((a: { activa: boolean }) => a.activa).map((a: { trabajador: { nombre: string } }) => a.trabajador.nombre))]
+        : [];
+      setCuidadores(nombresCuidadores);
+
+      const planes: PlanCfg[] = planesResp?.planes ?? [];
+      const cfg = c?.plan ? planes.find((pc) => pc.plan === c.plan) : null;
+      setCupoPlan(cfg?.cupoProcederesMes ?? null);
+
       setLoading(false);
     });
   }, [id]);
@@ -185,12 +350,32 @@ export default function HistoriaClinicaPage() {
     const deProcederes: Evento[] = procederes
       .map((p) => ({ tipo: "PROCEDER" as const, fecha: p.fecha.slice(0, 10), data: p }))
       .filter((e) => e.fecha >= desde && e.fecha <= hasta);
-    return [...deNotas, ...deProcederes].sort((a, b) => a.fecha.localeCompare(b.fecha));
-  }, [notas, procederes, desde, hasta]);
+    const deReportes: Evento[] = reportes
+      .map((r) => ({ tipo: "REPORTE" as const, fecha: r.fecha.slice(0, 10), data: r }))
+      .filter((e) => e.fecha >= desde && e.fecha <= hasta);
+    return [...deNotas, ...deProcederes, ...deReportes].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  }, [notas, procederes, reportes, desde, hasta]);
+
+  // Las cifras "del mes" (procederes/cupo) del resumen semanal/mensual se
+  // calculan siempre sobre el mes calendario completo que contiene a `ref`,
+  // no sobre el recorte visible — así el semanal de la última semana del mes
+  // muestra el cupo del mes entero, no solo el de esos 7 días.
+  const eventosDelMes = useMemo(() => {
+    const { desde: d, hasta: h } = mesCalendarioDe(ref);
+    const deNotas: Evento[] = notas.map((n) => ({ tipo: "NOTA" as const, fecha: n.fecha.slice(0, 10), data: n })).filter((e) => e.fecha >= d && e.fecha <= h);
+    const deProcederes: Evento[] = procederes.map((p) => ({ tipo: "PROCEDER" as const, fecha: p.fecha.slice(0, 10), data: p })).filter((e) => e.fecha >= d && e.fecha <= h);
+    return [...deNotas, ...deProcederes];
+  }, [notas, procederes, ref]);
 
   function abrirResumen() {
     if (!cliente) return;
-    setResumen(generarResumen(cliente, eventos, modo, ref));
+    // El texto del resumen (estado diario, medicación, incidentes, etc.) se
+    // arma con `eventos`, que respeta la ventana visible (día/semana/mes).
+    // El cupo de procederes es la única cifra que siempre habla del mes
+    // calendario completo aunque se esté mirando una semana suelta, así que
+    // se calcula aparte sobre `eventosDelMes`.
+    const procederesUsadosMes = eventosDelMes.filter((e) => e.tipo === "PROCEDER").length;
+    setResumen(generarResumen(cliente, eventos, modo, ref, cupoPlan, cuidadores, procederesUsadosMes));
     setMostrarResumen(true);
     setCopiado(false);
   }
@@ -257,7 +442,7 @@ export default function HistoriaClinicaPage() {
           </div>
           <textarea
             className="input font-mono text-sm"
-            rows={10}
+            rows={16}
             value={resumen}
             onChange={(e) => setResumen(e.target.value)}
           />
@@ -308,12 +493,19 @@ export default function HistoriaClinicaPage() {
                   {!e.data.notaCargada && <span className="badge bg-champagne/20 text-champagne">Nota sin cargar</span>}
                 </div>
               </div>
-            ) : (
+            ) : e.tipo === "PROCEDER" ? (
               <div className="flex-1 text-sm">
                 <span className="badge bg-teal/15 text-teal mr-2">Proceder de enfermería</span>
                 <span className="font-semibold">{e.data.proceder}</span>
                 <span className="text-navy/50"> · {e.data.enfermero.nombre}</span>
                 {e.data.notas && <p className="mt-1">{e.data.notas}</p>}
+              </div>
+            ) : (
+              <div className="flex-1 text-sm">
+                <span className="badge bg-champagne/20 text-champagne mr-2">Reporte diario</span>
+                <span className="text-navy/50">{e.data.trabajador.nombre}</span>
+                {e.data.estadoGeneral && <p className="mt-1">{e.data.estadoGeneral}</p>}
+                {e.data.observaciones && <p className="text-navy/70 mt-0.5">{e.data.observaciones}</p>}
               </div>
             )}
           </div>

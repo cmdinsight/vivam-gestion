@@ -20,6 +20,8 @@ type Dashboard = {
   pctMargen: string;
   costoCuidadores: string;
   costoFacturadores: string;
+  costoValoraciones: string;
+  cantidadValoraciones: number;
   costoTotalEmpresa: string;
   clientesActivos: number;
   ingresoPromedioCliente: string;
@@ -157,6 +159,12 @@ export default function DashboardPage() {
                   <span className="text-navy/60">Costo de médicos y enfermería</span>
                   <span className="font-semibold text-red-600">− {money(data.costoFacturadores)}</span>
                 </div>
+                {data.cantidadValoraciones > 0 && (
+                  <div className="flex justify-between text-xs text-navy/40 pl-3">
+                    <span>de las cuales, {data.cantidadValoraciones} valoración{data.cantidadValoraciones === 1 ? "" : "es"} inicial{data.cantidadValoraciones === 1 ? "" : "es"} (gratis al cliente)</span>
+                    <span>− {money(data.costoValoraciones)}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

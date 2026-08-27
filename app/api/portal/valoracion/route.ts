@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { datosValoracion, medicamentosValidos } from "@/lib/valoracion";
+import { mesDe, montoDeValoracion } from "@/lib/facturadores";
 import { requireProfesionalSession } from "@/lib/portalAuth";
 
 export const dynamic = "force-dynamic";
@@ -35,16 +36,22 @@ export async function POST(req: NextRequest) {
   }
 
   const medicamentos = medicamentosValidos(body);
+  const fecha = body.fecha ? new Date(body.fecha) : new Date();
   const data = {
     ...datosValoracion(body),
     medicoId: session.profesionalId,
-    fecha: body.fecha ? new Date(body.fecha) : new Date(),
+    fecha,
+    mes: mesDe(fecha),
   };
 
+  const montoLiquidado = await montoDeValoracion();
   const valoracion = await prisma.$transaction(async (tx) => {
     const v = await tx.valoracionInicial.upsert({
       where: { clienteId: body.clienteId },
-      create: { clienteId: body.clienteId, ...data },
+      // montoLiquidado solo se fija acá, en el `create`: si el registro ya
+      // existía, upsert usa el `update` de abajo y nunca lo vuelve a tocar
+      // aunque cambie el precio de lista.
+      create: { clienteId: body.clienteId, ...data, montoLiquidado },
       update: data,
     });
     await tx.medicamentoValoracion.deleteMany({ where: { valoracionId: v.id } });

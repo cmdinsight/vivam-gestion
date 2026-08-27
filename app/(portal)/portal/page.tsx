@@ -15,6 +15,7 @@ type Calculo = {
   total: string;
   topeAplicado: boolean;
   notasSinCargar: number;
+  desglose?: { valoracionesIniciales?: number; montoValoraciones?: string };
 };
 
 type Resultado = {
@@ -162,6 +163,12 @@ export default function PortalHomePage() {
                     <span className="text-navy/60">Variable por llamadas ({data.calculo.cantidadEventos})</span>
                     <span className="font-semibold">{money(data.calculo.variable)}</span>
                   </div>
+                  {!!data.calculo.desglose?.valoracionesIniciales && (
+                    <div className="flex justify-between text-xs text-navy/40 pl-3">
+                      <span>de las cuales, {data.calculo.desglose.valoracionesIniciales} valoración{data.calculo.desglose.valoracionesIniciales === 1 ? "" : "es"} inicial{data.calculo.desglose.valoracionesIniciales === 1 ? "" : "es"}</span>
+                      <span>{money(data.calculo.desglose.montoValoraciones)}</span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="flex justify-between">

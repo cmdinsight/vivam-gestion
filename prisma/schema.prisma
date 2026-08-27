@@ -449,6 +449,10 @@ model ConfiguracionFacturadores {
   tarifaGuardia       Decimal  @db.Decimal(12, 2) @default(700)
   tarifaEmergencia    Decimal  @db.Decimal(12, 2) @default(1200)
   topeMensualMedico   Decimal  @db.Decimal(12, 2) @default(25000)
+  // Lo que se le paga al médico por hacer la valoración inicial a domicilio.
+  // Es gratis para el cliente (no genera Cobro): pérdida inicial para la
+  // empresa, asumida como costo de adquisición.
+  precioValoracionInicial Decimal @db.Decimal(12, 2) @default(2500)
   // Enfermería. precioProcederSinIva es la fuente de verdad del módulo:
   // de acá salen tanto lo que se le cobra al cliente por un proceder fuera
   // de cupo como lo que se le paga al enfermero (pctEnfermero sobre este valor).
@@ -530,6 +534,11 @@ model ValoracionInicial {
   medicoId  String
   medico    Profesional @relation(fields: [medicoId], references: [id])
   fecha     DateTime
+  mes       String
+  // Lo que se le liquida al médico por esta valoración. Congelado al
+  // crearla (precioValoracionInicial vigente ese día); si se edita después
+  // no se vuelve a cobrar ni se recalcula.
+  montoLiquidado Decimal @db.Decimal(12, 2) @default(0)
 
   // 1. Datos del paciente (lo que no está ya en Cliente)
   cedulaIdentidad        String?
@@ -599,6 +608,8 @@ model ValoracionInicial {
   updatedAt DateTime @updatedAt
 
   medicamentos MedicamentoValoracion[]
+
+  @@index([mes, medicoId])
 }
 
 model MedicamentoValoracion {
