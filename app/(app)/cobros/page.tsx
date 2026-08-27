@@ -45,7 +45,13 @@ export default function CobrosPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mes }),
     });
-    setCobros(await res.json());
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data)) {
+      setLoading(false);
+      alert(data?.error || "No se pudieron generar los cobros. Probá de nuevo.");
+      return;
+    }
+    setCobros(data);
     setLoading(false);
   }
 
@@ -61,6 +67,13 @@ export default function CobrosPage() {
       body: JSON.stringify(body),
     });
     const actualizado = await res.json();
+    // Si el servidor devuelve un error en vez del cobro actualizado, no lo
+    // metemos en el estado — antes esto pisaba la fila con {error: "..."} y
+    // la pantalla se rompía al intentar mostrar actualizado.cliente.nombrePaciente.
+    if (!res.ok || !actualizado?.cliente) {
+      alert(actualizado?.error || "No se pudo actualizar el cobro. Probá de nuevo.");
+      return;
+    }
     setCobros((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)));
   }
 
