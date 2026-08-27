@@ -8,6 +8,11 @@ export type SessionPayload = {
   sub: string;
   usuario: string;
   nombre: string;
+  // Ausente (sesiones viejas de Usuario) o "ADMIN" = acceso completo al panel.
+  // "PROFESIONAL" = solo el portal de facturadores, ver middleware.ts.
+  rol?: "ADMIN" | "PROFESIONAL";
+  profesionalId?: string;
+  profesionalRol?: "MEDICO" | "ENFERMERO";
 };
 
 export async function signSession(payload: SessionPayload): Promise<string> {

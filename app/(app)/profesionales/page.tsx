@@ -17,6 +17,7 @@ type Profesional = {
   pctProceder: string | null;
   zonas: string | null;
   estado: string;
+  usuario: string | null;
 };
 
 type Config = {
@@ -66,6 +67,10 @@ export default function ProfesionalesPage() {
   const [cfg, setCfg] = useState<Config | null>(null);
   const [cfgAbierta, setCfgAbierta] = useState(false);
   const [cfgGuardada, setCfgGuardada] = useState(false);
+  const [accesoId, setAccesoId] = useState<string | null>(null);
+  const [accesoForm, setAccesoForm] = useState({ usuario: "", password: "" });
+  const [accesoError, setAccesoError] = useState("");
+  const [accesoGuardando, setAccesoGuardando] = useState(false);
 
   function load() {
     setLoading(true);
@@ -139,6 +144,38 @@ export default function ProfesionalesPage() {
   async function onDelete(id: string) {
     if (!confirm("¿Eliminar este profesional y todo su historial de notas, procederes y liquidaciones?")) return;
     await fetch(`/api/profesionales/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  function abrirAcceso(p: Profesional) {
+    setAccesoId(p.id);
+    setAccesoForm({ usuario: p.usuario ?? "", password: "" });
+    setAccesoError("");
+  }
+
+  async function guardarAcceso(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accesoId) return;
+    setAccesoGuardando(true);
+    setAccesoError("");
+    const res = await fetch(`/api/profesionales/${accesoId}/credenciales`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accesoForm),
+    });
+    setAccesoGuardando(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setAccesoError(d.error || "No se pudo guardar el acceso");
+      return;
+    }
+    setAccesoId(null);
+    load();
+  }
+
+  async function quitarAcceso(id: string) {
+    if (!confirm("¿Quitar el acceso al portal? El profesional no va a poder loguearse más hasta que se lo configures de nuevo.")) return;
+    await fetch(`/api/profesionales/${id}/credenciales`, { method: "DELETE" });
     load();
   }
 
@@ -216,6 +253,53 @@ export default function ProfesionalesPage() {
           </button>
         ))}
       </div>
+
+      {accesoId && (
+        <form onSubmit={guardarAcceso} className="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <h2 className="font-display text-lg sm:col-span-2">
+            Acceso al portal — {items.find((p) => p.id === accesoId)?.nombre}
+          </h2>
+          <p className="sm:col-span-2 text-sm text-navy/60">
+            Con esto el profesional puede entrar a{" "}
+            <span className="font-semibold">/portal</span> a cargar sus propias notas o procederes, ver su
+            liquidación y su historial. Pasale el usuario y la contraseña a mano.
+          </p>
+          <div>
+            <label className="label">Usuario</label>
+            <input
+              className="input"
+              required
+              autoCapitalize="none"
+              value={accesoForm.usuario}
+              onChange={(e) => setAccesoForm({ ...accesoForm, usuario: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">
+              {items.find((p) => p.id === accesoId)?.usuario ? "Nueva contraseña (opcional)" : "Contraseña"}
+            </label>
+            <input
+              className="input"
+              type="password"
+              required={!items.find((p) => p.id === accesoId)?.usuario}
+              placeholder={
+                items.find((p) => p.id === accesoId)?.usuario ? "Dejar vacío para no cambiarla" : undefined
+              }
+              value={accesoForm.password}
+              onChange={(e) => setAccesoForm({ ...accesoForm, password: e.target.value })}
+            />
+          </div>
+          {accesoError && <p className="sm:col-span-2 text-sm text-red-600">{accesoError}</p>}
+          <div className="sm:col-span-2 flex gap-2">
+            <button className="btn-primary" type="submit" disabled={accesoGuardando}>
+              {accesoGuardando ? "Guardando…" : "Guardar acceso"}
+            </button>
+            <button className="btn-ghost" type="button" onClick={() => setAccesoId(null)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
 
       {showForm && (
         <form onSubmit={onSubmit} className="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -335,6 +419,7 @@ export default function ProfesionalesPage() {
                 <th className="p-3">Seguro RC</th>
                 <th className="p-3">Pago</th>
                 <th className="p-3">Estado</th>
+                <th className="p-3">Acceso al portal</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
@@ -366,7 +451,22 @@ export default function ProfesionalesPage() {
                         {p.estado === "ACTIVO" ? "Activo" : "Inactivo"}
                       </span>
                     </td>
+                    <td className="p-3">
+                      {p.usuario ? (
+                        <span className="badge bg-teal/15 text-teal">{p.usuario}</span>
+                      ) : (
+                        <span className="badge bg-navy/10 text-navy">Sin acceso</span>
+                      )}
+                    </td>
                     <td className="p-3 text-right whitespace-nowrap">
+                      <button className="text-teal hover:underline mr-3" onClick={() => abrirAcceso(p)}>
+                        {p.usuario ? "Cambiar acceso" : "Dar acceso"}
+                      </button>
+                      {p.usuario && (
+                        <button className="text-navy/60 hover:underline mr-3" onClick={() => quitarAcceso(p.id)}>
+                          Quitar acceso
+                        </button>
+                      )}
                       <button className="text-teal hover:underline mr-3" onClick={() => abrirEdicion(p)}>
                         Editar
                       </button>
@@ -379,7 +479,7 @@ export default function ProfesionalesPage() {
               })}
               {visibles.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-navy/50">
+                  <td colSpan={8} className="p-6 text-center text-navy/50">
                     No hay profesionales cargados.
                   </td>
                 </tr>

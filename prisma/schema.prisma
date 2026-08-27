@@ -308,6 +308,10 @@ model Profesional {
   zonas           String?
   estado          EstadoProfesional @default(ACTIVO)
   notas           String?
+  // Login propio al portal de facturadores. Nulo hasta que el admin le
+  // configura un acceso desde Profesionales; sin usuario no puede loguearse.
+  usuario         String?           @unique
+  passwordHash    String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 

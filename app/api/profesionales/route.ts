@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
   const profesionales = await prisma.profesional.findMany({
     where: rol ? { rol: rol as "MEDICO" | "ENFERMERO" } : undefined,
     orderBy: [{ rol: "asc" }, { nombre: "asc" }],
+    omit: { passwordHash: true },
   });
   return NextResponse.json(profesionales);
 }
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const profesional = await prisma.profesional.create({
+    omit: { passwordHash: true },
     data: {
       nombre: body.nombre,
       rol: body.rol,

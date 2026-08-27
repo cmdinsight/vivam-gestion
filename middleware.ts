@@ -27,6 +27,25 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Un profesional (médico/enfermero) solo entra a su propio portal, nunca al
+  // panel administrativo ni a las APIs del panel: ahí no hay ningún filtro
+  // por profesionalId, así que dejarlo pasar expondría datos de otros
+  // clientes/profesionales.
+  if (session.rol === "PROFESIONAL") {
+    const permitido =
+      pathname.startsWith("/portal") ||
+      pathname.startsWith("/api/portal") ||
+      pathname.startsWith("/cambiar-password") ||
+      pathname.startsWith("/api/auth/change-password") ||
+      pathname.startsWith("/api/auth/logout");
+    if (!permitido) {
+      if (pathname.startsWith("/api")) {
+        return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL("/portal", req.url));
+    }
+  }
+
   return NextResponse.next();
 }
 

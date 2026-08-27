@@ -58,7 +58,7 @@ export async function registrarProceder(input: {
     getConfigFacturadores(),
     getPlanesConfig(),
     prisma.cliente.findUniqueOrThrow({ where: { id: input.clienteId } }),
-    prisma.profesional.findUniqueOrThrow({ where: { id: input.enfermeroId } }),
+    prisma.profesional.findUniqueOrThrow({ where: { id: input.enfermeroId }, omit: { passwordHash: true } }),
   ]);
 
   if (enfermero.rol !== "ENFERMERO") {
@@ -119,7 +119,10 @@ export async function renumerarProcederes(clienteId: string, mes: string) {
   ]);
 
   const enfermeroIds = [...new Set(procederes.map((p) => p.enfermeroId))];
-  const enfermeros = await prisma.profesional.findMany({ where: { id: { in: enfermeroIds } } });
+  const enfermeros = await prisma.profesional.findMany({
+    where: { id: { in: enfermeroIds } },
+    omit: { passwordHash: true },
+  });
   const enfermerosMap = new Map(enfermeros.map((e) => [e.id, e]));
 
   const precio = D(cfg.precioProcederSinIva);
@@ -155,7 +158,7 @@ export async function renumerarProcederes(clienteId: string, mes: string) {
  */
 export async function calcularLiquidacionFacturador(profesionalId: string, mes: string) {
   const [profesional, cfg] = await Promise.all([
-    prisma.profesional.findUniqueOrThrow({ where: { id: profesionalId } }),
+    prisma.profesional.findUniqueOrThrow({ where: { id: profesionalId }, omit: { passwordHash: true } }),
     getConfigFacturadores(),
   ]);
 
@@ -255,7 +258,7 @@ export async function resumenFacturadoresMes(
   const calculos =
     calculosPrevios ??
     (await Promise.all(
-      (await prisma.profesional.findMany({ where: { estado: "ACTIVO" } })).map((p) =>
+      (await prisma.profesional.findMany({ where: { estado: "ACTIVO" }, omit: { passwordHash: true } })).map((p) =>
         calcularLiquidacionFacturador(p.id, mes)
       )
     ));

@@ -12,6 +12,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "La nueva contraseña debe tener al menos 6 caracteres" }, { status: 400 });
   }
 
+  if (session.rol === "PROFESIONAL") {
+    const profesional = await prisma.profesional.findUnique({ where: { id: session.sub } });
+    if (!profesional?.passwordHash || !(await bcrypt.compare(actual, profesional.passwordHash))) {
+      return NextResponse.json({ error: "Contraseña actual incorrecta" }, { status: 401 });
+    }
+    const passwordHash = await bcrypt.hash(nueva, 10);
+    await prisma.profesional.update({ where: { id: profesional.id }, data: { passwordHash } });
+    return NextResponse.json({ ok: true });
+  }
+
   const user = await prisma.usuario.findUnique({ where: { id: session.sub } });
   if (!user || !(await bcrypt.compare(actual, user.passwordHash))) {
     return NextResponse.json({ error: "Contraseña actual incorrecta" }, { status: 401 });

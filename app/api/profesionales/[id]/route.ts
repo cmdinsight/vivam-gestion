@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const profesional = await prisma.profesional.findUnique({ where: { id: params.id } });
+  const profesional = await prisma.profesional.findUnique({
+    where: { id: params.id },
+    omit: { passwordHash: true },
+  });
   if (!profesional) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
   return NextResponse.json(profesional);
 }
@@ -13,6 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const body = await req.json();
   const profesional = await prisma.profesional.update({
     where: { id: params.id },
+    omit: { passwordHash: true },
     data: {
       nombre: body.nombre,
       rol: body.rol,

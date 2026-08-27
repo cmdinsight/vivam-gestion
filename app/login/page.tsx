@@ -20,12 +20,13 @@ function LoginForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ usuario, password }),
     });
+    const data = await res.json().catch(() => ({}));
     setLoading(false);
     if (res.ok) {
-      router.push(params.get("next") || "/dashboard");
+      const destinoDefault = data.rol === "PROFESIONAL" ? "/portal" : "/dashboard";
+      router.push(params.get("next") || destinoDefault);
       router.refresh();
     } else {
-      const data = await res.json().catch(() => ({}));
       setError(data.error || "No se pudo iniciar sesión");
     }
   }
