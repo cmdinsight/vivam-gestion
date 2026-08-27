@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calcularMes } from "@/lib/payroll";
 import { alertasHuecoCobertura, asegurarTurnosDelMes } from "@/lib/turnos";
+import { resumenFacturadoresMes } from "@/lib/facturadores";
 import { currentMonth } from "@/lib/format";
 import { Prisma } from "@prisma/client";
 
@@ -53,10 +54,45 @@ export async function GET(req: NextRequest) {
     .reduce((acc, c) => acc.add(c.montoEsperado), D(0));
   const pctAtraso = totalEsperado.gt(0) ? totalAtrasado.div(totalEsperado).mul(100) : D(0);
 
-  const margenReal = totalEsperado.sub(costoRealTotal);
+  // Rentabilidad de la empresa: además del costo de cuidadores (con provisión),
+  // suma lo que se liquida a médicos y enfermeros facturadores. Antes el
+  // "margen real" solo restaba cuidadores y sobreestimaba la rentabilidad.
+  const facturadores = await resumenFacturadoresMes(mes);
+  const costoCuidadores = costoRealTotal;
+  const costoFacturadores = facturadores.costoTotal;
+  const costoTotalEmpresa = costoCuidadores.add(costoFacturadores);
+  const margenReal = totalEsperado.sub(costoTotalEmpresa);
+  const pctMargen = totalEsperado.gt(0) ? margenReal.div(totalEsperado).mul(100) : D(0);
+
+  // Clientes con cobro generado ESE mes, no el conteo de activos de hoy: si no,
+  // al navegar a un mes pasado con otra cantidad de clientes, los promedios de
+  // ingreso/costo por cliente quedarían divididos por el número de hoy.
+  const clientesActivos = cobrosMes.length;
+  const ingresoPromedioCliente = clientesActivos > 0 ? totalEsperado.div(clientesActivos) : D(0);
+  const costoPromedioCliente = clientesActivos > 0 ? costoTotalEmpresa.div(clientesActivos) : D(0);
+  const pctCostoCuidadores = totalEsperado.gt(0) ? costoCuidadores.div(totalEsperado).mul(100) : D(0);
+  const pctCostoFacturadores = totalEsperado.gt(0) ? costoFacturadores.div(totalEsperado).mul(100) : D(0);
 
   // Alertas
   const alertas: { tipo: string; mensaje: string }[] = [];
+  if (facturadores.alertas.notasSinCargar > 0) {
+    alertas.push({
+      tipo: "notaGuardia",
+      mensaje: `Hay ${facturadores.alertas.notasSinCargar} nota${facturadores.alertas.notasSinCargar === 1 ? "" : "s"} de guardia sin cargar este mes: esas llamadas no se le liquidan al médico.`,
+    });
+  }
+  if (facturadores.alertas.sinBackup > 0) {
+    alertas.push({
+      tipo: "guardiaSinBackup",
+      mensaje: `Hay ${facturadores.alertas.sinBackup} bloque${facturadores.alertas.sinBackup === 1 ? "" : "s"} de guardia médica sin médico backup asignado este mes.`,
+    });
+  }
+  if (facturadores.alertas.seguroVencido > 0) {
+    alertas.push({
+      tipo: "seguroVencido",
+      mensaje: `${facturadores.alertas.seguroVencido} profesional${facturadores.alertas.seguroVencido === 1 ? "" : "es"} facturador${facturadores.alertas.seguroVencido === 1 ? "" : "es"} activo${facturadores.alertas.seguroVencido === 1 ? "" : "s"} con el seguro de responsabilidad civil vencido o sin cargar.`,
+    });
+  }
   const hoy = new Date();
   const proxJunio = new Date(hoy.getFullYear(), 5, 30);
   const proxDiciembre = new Date(hoy.getFullYear(), 11, 30);
@@ -104,6 +140,15 @@ export async function GET(req: NextRequest) {
     totalAtrasado,
     pctAtraso,
     margenReal,
+    pctMargen,
+    costoCuidadores,
+    costoFacturadores,
+    costoTotalEmpresa,
+    clientesActivos,
+    ingresoPromedioCliente,
+    costoPromedioCliente,
+    pctCostoCuidadores,
+    pctCostoFacturadores,
     alertas,
     cantidadTrabajadoresActivos: trabajadoresActivos.length,
     cantidadClientesConCobro: cobrosMes.length,

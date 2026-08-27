@@ -17,6 +17,15 @@ type Dashboard = {
   totalAtrasado: string;
   pctAtraso: string;
   margenReal: string;
+  pctMargen: string;
+  costoCuidadores: string;
+  costoFacturadores: string;
+  costoTotalEmpresa: string;
+  clientesActivos: number;
+  ingresoPromedioCliente: string;
+  costoPromedioCliente: string;
+  pctCostoCuidadores: string;
+  pctCostoFacturadores: string;
   alertas: { tipo: string; mensaje: string }[];
   cantidadTrabajadoresActivos: number;
   cantidadClientesConCobro: number;
@@ -127,11 +136,59 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="card p-5">
-              <h2 className="font-display text-lg mb-3">Margen real del mes</h2>
-              <p className="text-sm text-navy/60 mb-2">Ingresos esperados − costo real total (con provisión)</p>
+              <h2 className="font-display text-lg mb-3">Rentabilidad de la empresa</h2>
+              <p className="text-sm text-navy/60 mb-2">
+                Ingresos esperados − costo de cuidadores (con provisión) − costo de médicos y enfermería
+              </p>
               <p className={`font-display text-3xl ${Number(data.margenReal) >= 0 ? "text-teal" : "text-red-600"}`}>
                 {money(data.margenReal)}
               </p>
+              <p className="text-xs text-navy/50 mt-1">{num(data.pctMargen, 1)}% de margen sobre lo facturado</p>
+              <div className="mt-3 space-y-1.5 text-sm border-t border-navy/10 pt-3">
+                <div className="flex justify-between">
+                  <span className="text-navy/60">Ingresos esperados</span>
+                  <span className="font-semibold">{money(data.totalEsperado)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-navy/60">Costo de cuidadores</span>
+                  <span className="font-semibold text-red-600">− {money(data.costoCuidadores)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-navy/60">Costo de médicos y enfermería</span>
+                  <span className="font-semibold text-red-600">− {money(data.costoFacturadores)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="font-display text-lg mb-3">KPIs del mes</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Stat label="Clientes facturados este mes" value={String(data.clientesActivos)} tone="navy" />
+              <Stat
+                label="Ingreso promedio por cliente"
+                value={money(data.ingresoPromedioCliente)}
+                tone="teal"
+              />
+              <Stat
+                label="Costo promedio por cliente"
+                value={money(data.costoPromedioCliente)}
+                sub="Cuidador + médico/enfermería"
+                tone="champagne"
+              />
+              <Stat
+                label="Margen sobre lo facturado"
+                value={`${num(data.pctMargen, 1)}%`}
+                tone={Number(data.pctMargen) >= 0 ? "teal" : undefined}
+              />
+              <Stat
+                label="Costo de cuidadores / ingresos"
+                value={`${num(data.pctCostoCuidadores, 1)}%`}
+              />
+              <Stat
+                label="Costo de médicos y enfermería / ingresos"
+                value={`${num(data.pctCostoFacturadores, 1)}%`}
+              />
             </div>
           </div>
         </>
