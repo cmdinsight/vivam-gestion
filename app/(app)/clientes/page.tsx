@@ -268,6 +268,39 @@ export default function ClientesPage() {
                   ))}
                 </select>
               </div>
+              {planCfg && (
+                <div className="sm:col-span-2 rounded-lg border border-navy/10 bg-navy/[0.02] p-3">
+                  <p className="text-xs font-semibold text-navy/60 mb-2">
+                    Precio de {PLAN_LABELS[planCfg.plan]} según modalidad (para comparar antes de elegir)
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                    {modalidades.map((m) => {
+                      const precioMod = Math.round(parseFloat(planCfg.precioBase) * (1 - parseFloat(m.descuentoPct) / 100));
+                      const alerta =
+                        (planCfg.alertaAnual && m.modalidad === "ANUAL") ||
+                        (planCfg.alertaSemestral && m.modalidad === "SEMESTRAL");
+                      const elegida = m.modalidad === form.modalidad;
+                      return (
+                        <button
+                          type="button"
+                          key={m.modalidad}
+                          onClick={() => setForm({ ...form, modalidad: m.modalidad })}
+                          className={`rounded-lg border p-2 text-left transition ${
+                            elegida ? "border-teal bg-teal/10" : "border-navy/10 bg-white hover:border-navy/30"
+                          }`}
+                        >
+                          <p className="text-xs text-navy/60">
+                            {MODALIDAD_LABELS[m.modalidad]} · {m.descuentoPct}% off
+                          </p>
+                          <p className="font-semibold text-navy">
+                            {money(precioMod)} {alerta && <span title="Margen bajo, no ofrecer proactivamente">⚠️</span>}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           )}
           <div>
