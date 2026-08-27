@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { dateInput, currentMonth, monthLabel, shiftMonth, PLAN_LABELS, ESTADO_CLIENTE_LABELS } from "@/lib/format";
 import CalendarGrid from "@/components/CalendarGrid";
 
@@ -160,12 +161,17 @@ export default function ClienteDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl">{cliente.nombrePaciente}</h1>
-        <p className="text-navy/60 text-sm">
-          {cliente.familiaResponsable} · {cliente.plan ? PLAN_LABELS[cliente.plan] : "Por hora (sin plan)"} ·{" "}
-          <span className="font-semibold">{ESTADO_CLIENTE_LABELS[cliente.estado]}</span>
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h1 className="font-display text-2xl">{cliente.nombrePaciente}</h1>
+          <p className="text-navy/60 text-sm">
+            {cliente.familiaResponsable} · {cliente.plan ? PLAN_LABELS[cliente.plan] : "Por hora (sin plan)"} ·{" "}
+            <span className="font-semibold">{ESTADO_CLIENTE_LABELS[cliente.estado]}</span>
+          </p>
+        </div>
+        <Link href={`/clientes/${id}/historia`} className="btn-ghost text-sm">
+          Ver historia clínica
+        </Link>
       </div>
 
       <div className="card p-5">
