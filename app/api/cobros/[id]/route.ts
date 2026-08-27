@@ -11,7 +11,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     data.montoCobrado = null;
     data.fechaCobro = null;
   }
-  const cobro = await prisma.cobro.update({ where: { id: params.id }, data });
+  const cobro = await prisma.cobro.update({ where: { id: params.id }, data, include: { cliente: true } });
   return NextResponse.json(cobro);
 }
 
