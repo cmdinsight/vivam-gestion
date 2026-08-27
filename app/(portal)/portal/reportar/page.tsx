@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { dateInput, TIPO_LLAMADA_LABELS, QUIEN_LLAMA_LABELS } from "@/lib/format";
 
+function LinkFichaMedica({ clienteId }: { clienteId: string }) {
+  if (!clienteId) return null;
+  return (
+    <Link href={`/portal/ficha-medica/${clienteId}`} className="text-xs text-teal hover:underline mt-1 inline-block">
+      Ver ficha médica del paciente
+    </Link>
+  );
+}
+
 type Cliente = { id: string; nombrePaciente: string };
-type Rol = "MEDICO" | "ENFERMERO";
+type Rol = "MEDICO" | "ENFERMERO" | "CUIDADOR";
 
 const EMPTY_NOTA = {
   fecha: dateInput(new Date()),
@@ -23,24 +33,40 @@ const EMPTY_NOTA = {
 
 const EMPTY_PROCEDER = { fecha: dateInput(new Date()), clienteId: "", proceder: "", notas: "" };
 
+const EMPTY_REPORTE = {
+  fecha: dateInput(new Date()),
+  clienteId: "",
+  estadoGeneral: "",
+  animo: "",
+  alimentacion: "",
+  medicacionAdministrada: "",
+  movilidad: "",
+  higiene: "",
+  observaciones: "",
+};
+
 export default function ReportarPage() {
   const [rol, setRol] = useState<Rol | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [formNota, setFormNota] = useState(EMPTY_NOTA);
   const [formProceder, setFormProceder] = useState(EMPTY_PROCEDER);
+  const [formReporte, setFormReporte] = useState(EMPTY_REPORTE);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
   const [cargaError, setCargaError] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetch("/api/portal/me").then((r) => r.json()), fetch("/api/portal/clientes").then((r) => r.json())])
-      .then(([me, c]) => {
+    fetch("/api/portal/me")
+      .then((r) => r.json())
+      .then(async (me) => {
         if (!me?.rol) {
           setCargaError(true);
           return;
         }
         setRol(me.rol);
+        const endpointClientes = me.rol === "CUIDADOR" ? "/api/portal/mis-pacientes" : "/api/portal/clientes";
+        const c = await fetch(endpointClientes).then((r) => r.json());
         setClientes(Array.isArray(c) ? c : []);
       })
       .catch(() => setCargaError(true));
@@ -86,12 +112,34 @@ export default function ReportarPage() {
     setOk(true);
   }
 
+  async function guardarReporte(e: React.FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError("");
+    setOk(false);
+    const res = await fetch("/api/portal/reporte-diario", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formReporte),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setError(d.error || "No se pudo guardar el reporte");
+      return;
+    }
+    setFormReporte({ ...EMPTY_REPORTE, fecha: formReporte.fecha, clienteId: formReporte.clienteId });
+    setOk(true);
+  }
+
   if (cargaError) return <p className="text-red-600">No se pudo cargar esta página. Probá recargar.</p>;
   if (!rol) return <p className="text-navy/60">Cargando…</p>;
 
   return (
     <div className="space-y-4">
-      <h1 className="font-display text-2xl">{rol === "MEDICO" ? "Cargar nota de guardia" : "Cargar proceder"}</h1>
+      <h1 className="font-display text-2xl">
+        {rol === "MEDICO" ? "Cargar nota de guardia" : rol === "ENFERMERO" ? "Cargar proceder" : "Reporte diario"}
+      </h1>
 
       {rol === "MEDICO" ? (
         <form onSubmit={guardarNota} className="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -119,6 +167,7 @@ export default function ReportarPage() {
                 </option>
               ))}
             </select>
+            <LinkFichaMedica clienteId={formNota.clienteId} />
           </div>
           <div>
             <label className="label">Quién llama</label>
@@ -222,7 +271,7 @@ export default function ReportarPage() {
             {guardando ? "Guardando…" : "Guardar nota"}
           </button>
         </form>
-      ) : (
+      ) : rol === "ENFERMERO" ? (
         <form onSubmit={guardarProceder} className="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Fecha</label>
@@ -249,6 +298,7 @@ export default function ReportarPage() {
                 </option>
               ))}
             </select>
+            <LinkFichaMedica clienteId={formProceder.clienteId} />
           </div>
           <div className="sm:col-span-2">
             <label className="label">Proceder</label>
@@ -276,6 +326,105 @@ export default function ReportarPage() {
           {ok && <p className="sm:col-span-2 text-sm text-teal">Proceder guardado.</p>}
           <button className="btn-primary sm:col-span-2" type="submit" disabled={guardando}>
             {guardando ? "Guardando…" : "Guardar proceder"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={guardarReporte} className="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Fecha</label>
+            <input
+              className="input"
+              type="date"
+              required
+              value={formReporte.fecha}
+              onChange={(e) => setFormReporte({ ...formReporte, fecha: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Paciente</label>
+            <select
+              className="input"
+              required
+              value={formReporte.clienteId}
+              onChange={(e) => setFormReporte({ ...formReporte, clienteId: e.target.value })}
+            >
+              <option value="">Elegir…</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombrePaciente}
+                </option>
+              ))}
+            </select>
+            <LinkFichaMedica clienteId={formReporte.clienteId} />
+            {clientes.length === 0 && (
+              <p className="text-xs text-champagne mt-1">No tenés pacientes asignados todavía.</p>
+            )}
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Estado general</label>
+            <textarea
+              className="input"
+              rows={2}
+              value={formReporte.estadoGeneral}
+              onChange={(e) => setFormReporte({ ...formReporte, estadoGeneral: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Ánimo / energía</label>
+            <input
+              className="input"
+              value={formReporte.animo}
+              onChange={(e) => setFormReporte({ ...formReporte, animo: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Alimentación (qué y cuánto comió)</label>
+            <input
+              className="input"
+              value={formReporte.alimentacion}
+              onChange={(e) => setFormReporte({ ...formReporte, alimentacion: e.target.value })}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Medicación administrada (horario y qué se dio)</label>
+            <input
+              className="input"
+              value={formReporte.medicacionAdministrada}
+              onChange={(e) => setFormReporte({ ...formReporte, medicacionAdministrada: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Movilidad / actividad del día</label>
+            <input
+              className="input"
+              value={formReporte.movilidad}
+              onChange={(e) => setFormReporte({ ...formReporte, movilidad: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Higiene / continencia</label>
+            <input
+              className="input"
+              value={formReporte.higiene}
+              onChange={(e) => setFormReporte({ ...formReporte, higiene: e.target.value })}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Observaciones o incidentes</label>
+            <textarea
+              className="input"
+              rows={2}
+              value={formReporte.observaciones}
+              onChange={(e) => setFormReporte({ ...formReporte, observaciones: e.target.value })}
+            />
+          </div>
+          <p className="sm:col-span-2 text-xs text-navy/60">
+            Si ya cargaste un reporte hoy para este paciente, guardar de nuevo lo actualiza en vez de duplicarlo.
+          </p>
+          {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
+          {ok && <p className="sm:col-span-2 text-sm text-teal">Reporte guardado.</p>}
+          <button className="btn-primary sm:col-span-2" type="submit" disabled={guardando}>
+            {guardando ? "Guardando…" : "Guardar reporte"}
           </button>
         </form>
       )}

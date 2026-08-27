@@ -169,9 +169,14 @@ export default function ClienteDetailPage() {
             <span className="font-semibold">{ESTADO_CLIENTE_LABELS[cliente.estado]}</span>
           </p>
         </div>
-        <Link href={`/clientes/${id}/historia`} className="btn-ghost text-sm">
-          Ver historia clínica
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/clientes/${id}/valoracion`} className="btn-ghost text-sm">
+            Ficha médica
+          </Link>
+          <Link href={`/clientes/${id}/historia`} className="btn-ghost text-sm">
+            Ver historia clínica
+          </Link>
+        </div>
       </div>
 
       <div className="card p-5">

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { money, currentMonth, monthLabel, shiftMonth, TIPO_LLAMADA_LABELS } from "@/lib/format";
 
-type Rol = "MEDICO" | "ENFERMERO";
+type Rol = "MEDICO" | "ENFERMERO" | "CUIDADOR";
 
 type Nota = {
   id: string;
@@ -25,11 +25,25 @@ type Proceder = {
   cliente: { nombrePaciente: string };
 };
 
+type Reporte = {
+  id: string;
+  fecha: string;
+  estadoGeneral: string | null;
+  animo: string | null;
+  alimentacion: string | null;
+  medicacionAdministrada: string | null;
+  movilidad: string | null;
+  higiene: string | null;
+  observaciones: string | null;
+  cliente: { nombrePaciente: string };
+};
+
 export default function HistorialPage() {
   const [rol, setRol] = useState<Rol | null>(null);
   const [mes, setMes] = useState(currentMonth());
   const [notas, setNotas] = useState<Nota[]>([]);
   const [procederes, setProcederes] = useState<Proceder[]>([]);
+  const [reportes, setReportes] = useState<Reporte[]>([]);
   const [loading, setLoading] = useState(true);
   const [cargaError, setCargaError] = useState(false);
 
@@ -49,12 +63,18 @@ export default function HistorialPage() {
   useEffect(() => {
     if (!rol) return;
     setLoading(true);
-    const endpoint = rol === "MEDICO" ? `/api/portal/notas-guardia?mes=${mes}` : `/api/portal/procederes?mes=${mes}`;
+    const endpoint =
+      rol === "MEDICO"
+        ? `/api/portal/notas-guardia?mes=${mes}`
+        : rol === "ENFERMERO"
+          ? `/api/portal/procederes?mes=${mes}`
+          : `/api/portal/reporte-diario?mes=${mes}`;
     fetch(endpoint)
       .then((r) => r.json())
       .then((d) => {
         if (rol === "MEDICO") setNotas(Array.isArray(d) ? d : []);
-        else setProcederes(Array.isArray(d) ? d : []);
+        else if (rol === "ENFERMERO") setProcederes(Array.isArray(d) ? d : []);
+        else setReportes(Array.isArray(d) ? d : []);
         setLoading(false);
       });
   }, [rol, mes]);
@@ -98,7 +118,7 @@ export default function HistorialPage() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : rol === "ENFERMERO" ? (
         <div className="card divide-y divide-navy/5">
           {procederes.length === 0 && <p className="p-6 text-center text-navy/50">Sin procederes cargados este mes.</p>}
           {procederes.map((p) => (
@@ -111,6 +131,20 @@ export default function HistorialPage() {
               </div>
               <p className="text-navy/60 mt-0.5">{p.cliente.nombrePaciente}</p>
               {!p.dentroDeCupo && <span className="badge bg-navy/10 text-navy mt-1 inline-block">Fuera de cupo</span>}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card divide-y divide-navy/5">
+          {reportes.length === 0 && <p className="p-6 text-center text-navy/50">Sin reportes cargados este mes.</p>}
+          {reportes.map((r) => (
+            <div key={r.id} className="p-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">{new Date(r.fecha).toLocaleDateString("es-UY", { timeZone: "UTC" })}</span>
+                <span className="text-navy/60">{r.cliente.nombrePaciente}</span>
+              </div>
+              {r.estadoGeneral && <p className="mt-1">{r.estadoGeneral}</p>}
+              {r.observaciones && <p className="text-navy/60 mt-0.5">{r.observaciones}</p>}
             </div>
           ))}
         </div>

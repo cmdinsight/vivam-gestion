@@ -33,20 +33,37 @@ export async function POST(req: NextRequest) {
   // el admin, no hay match posible.
   const profesional = await prisma.profesional.findUnique({ where: { usuario: usuarioNorm } });
   if (
-    !profesional ||
-    !profesional.passwordHash ||
-    profesional.estado !== "ACTIVO" ||
-    !(await bcrypt.compare(password, profesional.passwordHash))
+    profesional &&
+    profesional.passwordHash &&
+    profesional.estado === "ACTIVO" &&
+    (await bcrypt.compare(password, profesional.passwordHash))
   ) {
+    return respuestaConSesion({
+      sub: profesional.id,
+      usuario: profesional.usuario!,
+      nombre: profesional.nombre,
+      rol: "PROFESIONAL",
+      profesionalId: profesional.id,
+      profesionalRol: profesional.rol,
+    });
+  }
+
+  // Tampoco es un profesional: probamos como login de cuidador. El hash vive
+  // en una tabla aparte (CuidadorAcceso) para no tener que auditar cada
+  // consulta existente de Trabajador (dashboard, liquidacion, turnos, etc.).
+  const acceso = await prisma.cuidadorAcceso.findUnique({
+    where: { usuario: usuarioNorm },
+    include: { trabajador: { select: { id: true, nombre: true, estado: true } } },
+  });
+  if (!acceso || acceso.trabajador.estado !== "ACTIVO" || !(await bcrypt.compare(password, acceso.passwordHash))) {
     return NextResponse.json({ error: "Usuario o contraseña incorrectos" }, { status: 401 });
   }
 
   return respuestaConSesion({
-    sub: profesional.id,
-    usuario: profesional.usuario!,
-    nombre: profesional.nombre,
-    rol: "PROFESIONAL",
-    profesionalId: profesional.id,
-    profesionalRol: profesional.rol,
+    sub: acceso.trabajadorId,
+    usuario: acceso.usuario,
+    nombre: acceso.trabajador.nombre,
+    rol: "CUIDADOR",
+    trabajadorId: acceso.trabajadorId,
   });
 }

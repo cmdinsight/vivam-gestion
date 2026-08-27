@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const trabajadores = await prisma.trabajador.findMany({ orderBy: { createdAt: "desc" } });
+  const trabajadores = await prisma.trabajador.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { acceso: { select: { usuario: true } } },
+  });
   return NextResponse.json(trabajadores);
 }
 

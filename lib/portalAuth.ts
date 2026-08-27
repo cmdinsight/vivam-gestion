@@ -18,3 +18,19 @@ export async function requireProfesionalSession(): Promise<ProfesionalSession | 
   }
   return session as ProfesionalSession;
 }
+
+type CuidadorSession = SessionPayload & { trabajadorId: string };
+
+/**
+ * Sesión de un cuidador logueado en /portal. Igual que con el profesional:
+ * nunca confiar en un trabajadorId que venga del cliente, todo lo que lee o
+ * escribe una ruta de /api/portal para cuidadores va scopeado al
+ * trabajadorId de ESTA sesión.
+ */
+export async function requireCuidadorSession(): Promise<CuidadorSession | null> {
+  const session = await getSession();
+  if (!session || session.rol !== "CUIDADOR" || !session.trabajadorId) {
+    return null;
+  }
+  return session as CuidadorSession;
+}

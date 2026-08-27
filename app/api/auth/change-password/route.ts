@@ -22,6 +22,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  if (session.rol === "CUIDADOR") {
+    const acceso = await prisma.cuidadorAcceso.findUnique({ where: { trabajadorId: session.sub } });
+    if (!acceso || !(await bcrypt.compare(actual, acceso.passwordHash))) {
+      return NextResponse.json({ error: "Contraseña actual incorrecta" }, { status: 401 });
+    }
+    const passwordHash = await bcrypt.hash(nueva, 10);
+    await prisma.cuidadorAcceso.update({ where: { id: acceso.id }, data: { passwordHash } });
+    return NextResponse.json({ ok: true });
+  }
+
   const user = await prisma.usuario.findUnique({ where: { id: session.sub } });
   if (!user || !(await bcrypt.compare(actual, user.passwordHash))) {
     return NextResponse.json({ error: "Contraseña actual incorrecta" }, { status: 401 });

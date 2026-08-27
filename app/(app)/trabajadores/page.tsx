@@ -14,6 +14,7 @@ type Trabajador = {
   tarifa: string;
   cuentaBancaria: string | null;
   estado: string;
+  acceso: { usuario: string } | null;
 };
 
 const EMPTY = {
@@ -33,6 +34,10 @@ export default function TrabajadoresPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY);
+  const [accesoId, setAccesoId] = useState<string | null>(null);
+  const [accesoForm, setAccesoForm] = useState({ usuario: "", password: "" });
+  const [accesoError, setAccesoError] = useState("");
+  const [accesoGuardando, setAccesoGuardando] = useState(false);
 
   function load() {
     setLoading(true);
@@ -64,6 +69,38 @@ export default function TrabajadoresPage() {
     load();
   }
 
+  function abrirAcceso(t: Trabajador) {
+    setAccesoId(t.id);
+    setAccesoForm({ usuario: t.acceso?.usuario ?? "", password: "" });
+    setAccesoError("");
+  }
+
+  async function guardarAcceso(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accesoId) return;
+    setAccesoGuardando(true);
+    setAccesoError("");
+    const res = await fetch(`/api/trabajadores/${accesoId}/credenciales`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accesoForm),
+    });
+    setAccesoGuardando(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setAccesoError(d.error || "No se pudo guardar el acceso");
+      return;
+    }
+    setAccesoId(null);
+    load();
+  }
+
+  async function quitarAcceso(id: string) {
+    if (!confirm("¿Quitar el acceso al portal? El cuidador no va a poder loguearse más hasta que se lo configures de nuevo.")) return;
+    await fetch(`/api/trabajadores/${id}/credenciales`, { method: "DELETE" });
+    load();
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -77,6 +114,52 @@ export default function TrabajadoresPage() {
           </button>
         </div>
       </div>
+
+      {accesoId && (
+        <form onSubmit={guardarAcceso} className="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <h2 className="font-display text-lg sm:col-span-2">
+            Acceso al portal — {trabajadores.find((t) => t.id === accesoId)?.nombre}
+          </h2>
+          <p className="sm:col-span-2 text-sm text-navy/60">
+            Con esto el cuidador puede entrar a <span className="font-semibold">/portal</span> a cargar el reporte
+            diario de sus pacientes. Pasale el usuario y la contraseña a mano.
+          </p>
+          <div>
+            <label className="label">Usuario</label>
+            <input
+              className="input"
+              required
+              autoCapitalize="none"
+              value={accesoForm.usuario}
+              onChange={(e) => setAccesoForm({ ...accesoForm, usuario: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">
+              {trabajadores.find((t) => t.id === accesoId)?.acceso ? "Nueva contraseña (opcional)" : "Contraseña"}
+            </label>
+            <input
+              className="input"
+              type="password"
+              required={!trabajadores.find((t) => t.id === accesoId)?.acceso}
+              placeholder={
+                trabajadores.find((t) => t.id === accesoId)?.acceso ? "Dejar vacío para no cambiarla" : undefined
+              }
+              value={accesoForm.password}
+              onChange={(e) => setAccesoForm({ ...accesoForm, password: e.target.value })}
+            />
+          </div>
+          {accesoError && <p className="sm:col-span-2 text-sm text-red-600">{accesoError}</p>}
+          <div className="sm:col-span-2 flex gap-2">
+            <button className="btn-primary" type="submit" disabled={accesoGuardando}>
+              {accesoGuardando ? "Guardando…" : "Guardar acceso"}
+            </button>
+            <button className="btn-ghost" type="button" onClick={() => setAccesoId(null)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
 
       {showForm && (
         <form onSubmit={onSubmit} className="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -170,6 +253,7 @@ export default function TrabajadoresPage() {
                 <th className="p-3">Categoría</th>
                 <th className="p-3">Tarifa</th>
                 <th className="p-3">Estado</th>
+                <th className="p-3">Acceso al portal</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
@@ -190,7 +274,22 @@ export default function TrabajadoresPage() {
                       {t.estado === "ACTIVO" ? "Activo" : "Inactivo"}
                     </span>
                   </td>
+                  <td className="p-3">
+                    {t.acceso ? (
+                      <span className="badge bg-teal/15 text-teal">{t.acceso.usuario}</span>
+                    ) : (
+                      <span className="badge bg-navy/10 text-navy">Sin acceso</span>
+                    )}
+                  </td>
                   <td className="p-3 text-right whitespace-nowrap">
+                    <button className="text-teal hover:underline mr-3" onClick={() => abrirAcceso(t)}>
+                      {t.acceso ? "Cambiar acceso" : "Dar acceso"}
+                    </button>
+                    {t.acceso && (
+                      <button className="text-navy/60 hover:underline mr-3" onClick={() => quitarAcceso(t.id)}>
+                        Quitar acceso
+                      </button>
+                    )}
                     <Link href={`/trabajadores/${t.id}`} className="text-teal hover:underline mr-3">
                       Ver / turnos
                     </Link>
@@ -202,7 +301,7 @@ export default function TrabajadoresPage() {
               ))}
               {trabajadores.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-6 text-center text-navy/50">
+                  <td colSpan={6} className="p-6 text-center text-navy/50">
                     No hay cuidadores registrados.
                   </td>
                 </tr>

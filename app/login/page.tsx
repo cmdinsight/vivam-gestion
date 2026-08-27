@@ -23,7 +23,7 @@ function LoginForm() {
     const data = await res.json().catch(() => ({}));
     setLoading(false);
     if (res.ok) {
-      const destinoDefault = data.rol === "PROFESIONAL" ? "/portal" : "/dashboard";
+      const destinoDefault = data.rol === "PROFESIONAL" || data.rol === "CUIDADOR" ? "/portal" : "/dashboard";
       router.push(params.get("next") || destinoDefault);
       router.refresh();
     } else {

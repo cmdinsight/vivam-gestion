@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { money, currentMonth, monthLabel, shiftMonth } from "@/lib/format";
 
+type Rol = "MEDICO" | "ENFERMERO" | "CUIDADOR";
+
 type Calculo = {
   profesional: { nombre: string; rol: "MEDICO" | "ENFERMERO" };
   base: string;
@@ -20,15 +22,54 @@ type Resultado = {
   cerrada: { total: string; pagado: boolean } | null;
 };
 
+type Cliente = { id: string; nombrePaciente: string };
+
 export default function PortalHomePage() {
+  const [rol, setRol] = useState<Rol | null>(null);
+  const [nombre, setNombre] = useState("");
   const [mes, setMes] = useState(currentMonth());
   const [data, setData] = useState<Resultado | null>(null);
+  const [pacientes, setPacientes] = useState<Cliente[]>([]);
+  const [cantidadReportes, setCantidadReportes] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    fetch("/api/portal/me")
+      .then((r) => r.json())
+      .then((me) => {
+        if (!me?.rol) {
+          setError(true);
+          return;
+        }
+        setRol(me.rol);
+        setNombre(me.nombre ?? "");
+      })
+      .catch(() => setError(true));
+  }, []);
+
+  useEffect(() => {
+    if (!rol) return;
     setLoading(true);
     setError(false);
+
+    if (rol === "CUIDADOR") {
+      Promise.all([
+        fetch("/api/portal/mis-pacientes").then((r) => r.json()),
+        fetch(`/api/portal/reporte-diario?mes=${mes}`).then((r) => r.json()),
+      ])
+        .then(([p, reportes]) => {
+          setPacientes(Array.isArray(p) ? p : []);
+          setCantidadReportes(Array.isArray(reportes) ? reportes.length : 0);
+          setLoading(false);
+        })
+        .catch(() => {
+          setError(true);
+          setLoading(false);
+        });
+      return;
+    }
+
     fetch(`/api/portal/liquidacion?mes=${mes}`)
       .then(async (r) => {
         const d = await r.json();
@@ -44,14 +85,14 @@ export default function PortalHomePage() {
         setError(true);
         setLoading(false);
       });
-  }, [mes]);
+  }, [rol, mes]);
 
   const esMedico = data?.calculo.profesional.rol === "MEDICO";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-display text-2xl">{data ? `Hola, ${data.calculo.profesional.nombre.split(" ")[0]}` : "Portal"}</h1>
+        <h1 className="font-display text-2xl">{nombre ? `Hola, ${nombre.split(" ")[0]}` : "Portal"}</h1>
         <div className="flex items-center gap-2 text-sm">
           <button className="btn-ghost px-2 py-1" onClick={() => setMes(shiftMonth(mes, -1))}>
             ←
@@ -64,8 +105,40 @@ export default function PortalHomePage() {
       </div>
 
       {error ? (
-        <p className="text-red-600">No se pudo cargar tu liquidación. Probá recargar la página.</p>
-      ) : loading || !data ? (
+        <p className="text-red-600">No se pudo cargar esta página. Probá recargar.</p>
+      ) : loading || !rol ? (
+        <p className="text-navy/60">Cargando…</p>
+      ) : rol === "CUIDADOR" ? (
+        <>
+          <div className="card p-5">
+            <h2 className="font-display text-lg mb-3">Mis pacientes asignados</h2>
+            {pacientes.length === 0 ? (
+              <p className="text-sm text-navy/50">No tenés pacientes asignados todavía.</p>
+            ) : (
+              <ul className="text-sm space-y-1">
+                {pacientes.map((p) => (
+                  <li key={p.id}>{p.nombrePaciente}</li>
+                ))}
+              </ul>
+            )}
+            <p className="text-xs text-navy/50 mt-3">
+              {cantidadReportes} reporte{cantidadReportes === 1 ? "" : "s"} diario{cantidadReportes === 1 ? "" : "s"}{" "}
+              cargado{cantidadReportes === 1 ? "" : "s"} este mes.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link href="/portal/reportar" className="card p-5 hover:border-teal/40 transition block">
+              <p className="font-display text-lg">Cargar reporte diario</p>
+              <p className="text-sm text-navy/60 mt-1">Contar cómo estuvo el paciente hoy</p>
+            </Link>
+            <Link href="/portal/historial" className="card p-5 hover:border-teal/40 transition block">
+              <p className="font-display text-lg">Mi historial</p>
+              <p className="text-sm text-navy/60 mt-1">Ver todo lo que cargué</p>
+            </Link>
+          </div>
+        </>
+      ) : !data ? (
         <p className="text-navy/60">Cargando…</p>
       ) : (
         <>

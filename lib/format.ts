@@ -92,6 +92,27 @@ export const QUIEN_LLAMA_LABELS: Record<string, string> = {
   FAMILIAR: "Familiar",
 };
 
+export const TIPO_MOVILIDAD_LABELS: Record<string, string> = {
+  INDEPENDIENTE: "Independiente",
+  ASISTIDO: "Asistido / con ayuda",
+  SILLA_RUEDAS: "Silla de ruedas",
+  POSTRADO: "Postrado/a",
+};
+
+export const TIPO_CONTINENCIA_LABELS: Record<string, string> = {
+  CONTINENTE: "Continente",
+  OCASIONAL: "Incontinencia ocasional",
+  TOTAL: "Incontinencia total",
+  PANAL: "Usa pañal",
+};
+
+export const TIPO_AYUDA_LABELS: Record<string, string> = {
+  INDEPENDIENTE: "Independiente",
+  PARCIAL: "Requiere ayuda parcial",
+  TOTAL: "Requiere ayuda total",
+  SONDA: "Sonda",
+};
+
 /** true si el seguro de RC profesional está vencido o sin cargar. */
 export function seguroVencido(fecha: string | Date | null | undefined): boolean {
   if (!fecha) return true;

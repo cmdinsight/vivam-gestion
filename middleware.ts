@@ -27,11 +27,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Un profesional (médico/enfermero) solo entra a su propio portal, nunca al
-  // panel administrativo ni a las APIs del panel: ahí no hay ningún filtro
-  // por profesionalId, así que dejarlo pasar expondría datos de otros
-  // clientes/profesionales.
-  if (session.rol === "PROFESIONAL") {
+  // Un profesional (médico/enfermero) o un cuidador solo entran a su propio
+  // portal, nunca al panel administrativo ni a las APIs del panel: ahí no hay
+  // ningún filtro por profesionalId/trabajadorId, así que dejarlos pasar
+  // expondría datos de otros clientes/profesionales/cuidadores.
+  if (session.rol === "PROFESIONAL" || session.rol === "CUIDADOR") {
     const permitido =
       pathname.startsWith("/portal") ||
       pathname.startsWith("/api/portal") ||
