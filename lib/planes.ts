@@ -12,16 +12,21 @@ export const IVA_TARIFA_HORA_PCT = 10;
 // precioBase = precio de tarifa llena (100%), calculado de forma que
 // precioBase * (1 - 5%) = el "Total cliente" de la modalidad mensual rotativo
 // de la Matriz de precios Vivam.
-const DEFAULTS_PLAN: Record<PlanContratado, { horasMes: number; precioBase: number; costoCuidadorMes: number; cupoProcederesMes: number; alertaAnual: boolean }> = {
-  ESENCIAL_LUNES_VIERNES: { horasMes: 160, precioBase: 61600, costoCuidadorMes: 36800, cupoProcederesMes: 2, alertaAnual: true },
-  ESENCIAL_COMPLETO: { horasMes: 240, precioBase: 92400, costoCuidadorMes: 55200, cupoProcederesMes: 2, alertaAnual: true },
-  EXTENDIDO: { horasMes: 480, precioBase: 184800, costoCuidadorMes: 110400, cupoProcederesMes: 5, alertaAnual: false },
-  INTEGRAL: { horasMes: 720, precioBase: 304920, costoCuidadorMes: 175920, cupoProcederesMes: 10, alertaAnual: false },
+const DEFAULTS_PLAN: Record<PlanContratado, { horasMes: number; precioBase: number; costoCuidadorMes: number; cupoProcederesMes: number; alertaAnual: boolean; alertaSemestral: boolean }> = {
+  // Repreciado el 26/ago/2026: 65263 * 0.95 = $62.000 c/IVA en mensual rotativo
+  // (antes 61600 -> $58.520). Era el único plan que, una vez descontados el
+  // enfermero y la guardia médica, no alcanzaba el piso de margen a ningún
+  // volumen de pacientes: su techo matemático era 26,1%.
+  ESENCIAL_LUNES_VIERNES: { horasMes: 160, precioBase: 65263, costoCuidadorMes: 36800, cupoProcederesMes: 2, alertaAnual: true, alertaSemestral: true },
+  ESENCIAL_COMPLETO: { horasMes: 240, precioBase: 92400, costoCuidadorMes: 55200, cupoProcederesMes: 2, alertaAnual: true, alertaSemestral: true },
+  EXTENDIDO: { horasMes: 480, precioBase: 184800, costoCuidadorMes: 110400, cupoProcederesMes: 5, alertaAnual: true, alertaSemestral: true },
+  INTEGRAL: { horasMes: 720, precioBase: 304920, costoCuidadorMes: 175920, cupoProcederesMes: 10, alertaAnual: true, alertaSemestral: true },
   // 240 h nocturnas/mes × $455 (tarifa cliente nocturna) × 1.10 IVA = 120120 tarifa llena.
   // Con el 5% de volumen ya incluido en el descuento de cada modalidad, el mensual
-  // rotativo da $114.114 c/IVA, igual que la matriz. Anual sí se puede ofrecer
-  // proactivamente (margen 31,4%, no cae en zona de alerta como los Esenciales).
-  VIVAM_NOCTURNO: { horasMes: 240, precioBase: 120120, costoCuidadorMes: 65520, cupoProcederesMes: 2, alertaAnual: false },
+  // rotativo da $114.114 c/IVA, igual que la matriz. Es el ÚNICO plan que aguanta
+  // las cuatro modalidades por encima del piso una vez descontados enfermería y
+  // guardia médica (32,9% mensual / 27,0% anual): por eso no lleva alertas.
+  VIVAM_NOCTURNO: { horasMes: 240, precioBase: 120120, costoCuidadorMes: 65520, cupoProcederesMes: 2, alertaAnual: false, alertaSemestral: false },
 };
 
 const DEFAULTS_MODALIDAD: Record<Modalidad, number> = {
@@ -74,8 +79,19 @@ export async function calcularPrecioCliente(plan: PlanContratado, modalidad: Mod
   return { precio: Math.round(precio.toNumber()), planCfg, modCfg };
 }
 
-export function debeAlertarMargen(planCfg: { alertaAnual: boolean }, modalidad: Modalidad) {
-  return planCfg.alertaAnual && modalidad === "ANUAL";
+/**
+ * Con los costos reales del modelo (cuidador + enfermero facturador + guardia
+ * médica), 13 de las 20 combinaciones de plan × modalidad quedan por debajo del
+ * piso verde de 27% y 9 por debajo del piso ámbar de 25%. Estas banderas marcan
+ * las modalidades que NO hay que ofrecer proactivamente en cada plan.
+ */
+export function debeAlertarMargen(
+  planCfg: { alertaAnual: boolean; alertaSemestral: boolean },
+  modalidad: Modalidad
+) {
+  if (modalidad === "ANUAL") return planCfg.alertaAnual;
+  if (modalidad === "SEMESTRAL") return planCfg.alertaSemestral;
+  return false;
 }
 
 function diasEnMes(mes: string): number {

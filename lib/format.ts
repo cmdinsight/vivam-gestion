@@ -74,3 +74,27 @@ export const ESTADO_COBRO_LABELS: Record<string, string> = {
   COBRADO: "Cobrado",
   ATRASADO: "Atrasado",
 };
+
+export const ROL_PROFESIONAL_LABELS: Record<string, string> = {
+  MEDICO: "Médico",
+  ENFERMERO: "Enfermero",
+};
+
+export const TIPO_LLAMADA_LABELS: Record<string, string> = {
+  PROGRAMADA: "Consulta programada",
+  GUARDIA: "Consulta de guardia",
+  EMERGENCIA: "Emergencia",
+};
+
+export const QUIEN_LLAMA_LABELS: Record<string, string> = {
+  CUIDADOR: "Cuidador",
+  ENFERMERO: "Enfermero",
+  FAMILIAR: "Familiar",
+};
+
+/** true si el seguro de RC profesional está vencido o sin cargar. */
+export function seguroVencido(fecha: string | Date | null | undefined): boolean {
+  if (!fecha) return true;
+  const d = typeof fecha === "string" ? new Date(fecha) : fecha;
+  return d.getTime() < Date.now();
+}

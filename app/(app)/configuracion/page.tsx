@@ -24,6 +24,7 @@ type PlanCfg = {
   costoCuidadorMes: string;
   cupoProcederesMes: number;
   alertaAnual: boolean;
+  alertaSemestral: boolean;
 };
 
 type ModalidadCfg = {
@@ -116,6 +117,7 @@ export default function ConfiguracionPage() {
           costoCuidadorMes: parseFloat(p.costoCuidadorMes),
           cupoProcederesMes: parseInt(String(p.cupoProcederesMes)),
           alertaAnual: p.alertaAnual,
+          alertaSemestral: p.alertaSemestral,
         })),
         modalidades: modalidades.map((m) => ({ modalidad: m.modalidad, descuentoPct: parseFloat(m.descuentoPct) })),
       }),
@@ -342,6 +344,7 @@ export default function ConfiguracionPage() {
                   <th className="p-2">Precio base (100%, $)</th>
                   <th className="p-2">Costo cuidador/mes ($)</th>
                   <th className="p-2">Cupo procederes/mes</th>
+                  <th className="p-2">Alertar en Semestral</th>
                   <th className="p-2">Alertar en Anual</th>
                 </tr>
               </thead>
@@ -381,6 +384,13 @@ export default function ConfiguracionPage() {
                         type="number"
                         value={p.cupoProcederesMes}
                         onChange={(e) => updatePlan(p.plan, "cupoProcederesMes", e.target.value)}
+                      />
+                    </td>
+                    <td className="p-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={p.alertaSemestral}
+                        onChange={(e) => updatePlan(p.plan, "alertaSemestral", e.target.checked)}
                       />
                     </td>
                     <td className="p-2 text-center">

@@ -12,8 +12,15 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
-  const planes: { plan: PlanContratado; horasMes: number; precioBase: number; costoCuidadorMes: number; cupoProcederesMes: number; alertaAnual: boolean }[] =
-    body.planes || [];
+  const planes: {
+    plan: PlanContratado;
+    horasMes: number;
+    precioBase: number;
+    costoCuidadorMes: number;
+    cupoProcederesMes: number;
+    alertaAnual: boolean;
+    alertaSemestral: boolean;
+  }[] = body.planes || [];
   const modalidades: { modalidad: Modalidad; descuentoPct: number }[] = body.modalidades || [];
 
   await Promise.all([
@@ -26,6 +33,7 @@ export async function PUT(req: NextRequest) {
           costoCuidadorMes: p.costoCuidadorMes,
           cupoProcederesMes: p.cupoProcederesMes,
           alertaAnual: p.alertaAnual,
+          alertaSemestral: p.alertaSemestral,
         },
       })
     ),

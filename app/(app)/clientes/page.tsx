@@ -26,6 +26,7 @@ type PlanCfg = {
   costoCuidadorMes: string;
   cupoProcederesMes: number;
   alertaAnual: boolean;
+  alertaSemestral: boolean;
 };
 
 type ModalidadCfg = { modalidad: string; descuentoPct: string };
@@ -139,7 +140,13 @@ export default function ClientesPage() {
   const modCfg = modalidades.find((m) => m.modalidad === form.modalidad);
   const precioCalculado =
     planCfg && modCfg ? Math.round(parseFloat(planCfg.precioBase) * (1 - parseFloat(modCfg.descuentoPct) / 100)) : null;
-  const mostrarAlerta = !esPorHora && !!planCfg?.alertaAnual && form.modalidad === "ANUAL";
+  // debeAlertarMargen() vive en lib/planes.ts junto a código que usa Prisma;
+  // se replica la misma condición acá en vez de importarlo para no arrastrar
+  // el cliente de Prisma al bundle del navegador.
+  const mostrarAlerta =
+    !esPorHora &&
+    ((!!planCfg?.alertaAnual && form.modalidad === "ANUAL") ||
+      (!!planCfg?.alertaSemestral && form.modalidad === "SEMESTRAL"));
 
   return (
     <div className="space-y-4">
@@ -261,6 +268,39 @@ export default function ClientesPage() {
                   ))}
                 </select>
               </div>
+              {planCfg && (
+                <div className="sm:col-span-2 rounded-lg border border-navy/10 bg-navy/[0.02] p-3">
+                  <p className="text-xs font-semibold text-navy/60 mb-2">
+                    Precio de {PLAN_LABELS[planCfg.plan]} según modalidad (para comparar antes de elegir)
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                    {modalidades.map((m) => {
+                      const precioMod = Math.round(parseFloat(planCfg.precioBase) * (1 - parseFloat(m.descuentoPct) / 100));
+                      const alerta =
+                        (planCfg.alertaAnual && m.modalidad === "ANUAL") ||
+                        (planCfg.alertaSemestral && m.modalidad === "SEMESTRAL");
+                      const elegida = m.modalidad === form.modalidad;
+                      return (
+                        <button
+                          type="button"
+                          key={m.modalidad}
+                          onClick={() => setForm({ ...form, modalidad: m.modalidad })}
+                          className={`rounded-lg border p-2 text-left transition ${
+                            elegida ? "border-teal bg-teal/10" : "border-navy/10 bg-white hover:border-navy/30"
+                          }`}
+                        >
+                          <p className="text-xs text-navy/60">
+                            {MODALIDAD_LABELS[m.modalidad]} · {m.descuentoPct}% off
+                          </p>
+                          <p className="font-semibold text-navy">
+                            {money(precioMod)} {alerta && <span title="Margen bajo, no ofrecer proactivamente">⚠️</span>}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           )}
           <div>
@@ -283,8 +323,9 @@ export default function ClientesPage() {
           )}
           {mostrarAlerta && (
             <div className="sm:col-span-2 rounded-lg border-l-4 border-red-400 bg-red-50 p-3 text-sm text-red-700">
-              ⚠️ Este plan en modalidad Anual cae a un margen bajo (~24,8%, zona ámbar/rojo). No se debe ofrecer
-              proactivamente — solo cerrarlo así si el cliente lo negocia explícitamente. La venta no está bloqueada.
+              ⚠️ Este plan en modalidad {MODALIDAD_LABELS[form.modalidad]} cae a un margen bajo (zona ámbar/rojo una
+              vez descontados cuidador, enfermería y guardia médica). No se debe ofrecer proactivamente — solo
+              cerrarlo así si el cliente lo negocia explícitamente. La venta no está bloqueada.
             </div>
           )}
           <div>
