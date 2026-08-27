@@ -4,6 +4,31 @@ import { getPlanesConfig } from "./planes";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
+// Lista blanca de campos de Profesional seguros para devolver en un JSON:
+// nunca incluye passwordHash. Se usa en vez de `omit` (que necesita el
+// preview feature "omit" habilitado en el generator, y no lo tenemos) en
+// cada lugar que lee un Profesional para exponerlo, acá o en las rutas admin.
+export const PROFESIONAL_SIN_HASH = {
+  id: true,
+  nombre: true,
+  rol: true,
+  especialidad: true,
+  contacto: true,
+  cajaProfesional: true,
+  rutMonotributo: true,
+  seguroRcVence: true,
+  cuentaBancaria: true,
+  baseMensual: true,
+  topeMensual: true,
+  pctProceder: true,
+  zonas: true,
+  estado: true,
+  notas: true,
+  usuario: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ProfesionalSelect;
+
 export async function getConfigFacturadores() {
   const cfg = await prisma.configuracionFacturadores.findUnique({ where: { id: 1 } });
   if (cfg) return cfg;
@@ -58,7 +83,7 @@ export async function registrarProceder(input: {
     getConfigFacturadores(),
     getPlanesConfig(),
     prisma.cliente.findUniqueOrThrow({ where: { id: input.clienteId } }),
-    prisma.profesional.findUniqueOrThrow({ where: { id: input.enfermeroId }, omit: { passwordHash: true } }),
+    prisma.profesional.findUniqueOrThrow({ where: { id: input.enfermeroId }, select: PROFESIONAL_SIN_HASH }),
   ]);
 
   if (enfermero.rol !== "ENFERMERO") {
@@ -121,7 +146,7 @@ export async function renumerarProcederes(clienteId: string, mes: string) {
   const enfermeroIds = [...new Set(procederes.map((p) => p.enfermeroId))];
   const enfermeros = await prisma.profesional.findMany({
     where: { id: { in: enfermeroIds } },
-    omit: { passwordHash: true },
+    select: PROFESIONAL_SIN_HASH,
   });
   const enfermerosMap = new Map(enfermeros.map((e) => [e.id, e]));
 
@@ -158,7 +183,7 @@ export async function renumerarProcederes(clienteId: string, mes: string) {
  */
 export async function calcularLiquidacionFacturador(profesionalId: string, mes: string) {
   const [profesional, cfg] = await Promise.all([
-    prisma.profesional.findUniqueOrThrow({ where: { id: profesionalId }, omit: { passwordHash: true } }),
+    prisma.profesional.findUniqueOrThrow({ where: { id: profesionalId }, select: PROFESIONAL_SIN_HASH }),
     getConfigFacturadores(),
   ]);
 
@@ -258,7 +283,7 @@ export async function resumenFacturadoresMes(
   const calculos =
     calculosPrevios ??
     (await Promise.all(
-      (await prisma.profesional.findMany({ where: { estado: "ACTIVO" }, omit: { passwordHash: true } })).map((p) =>
+      (await prisma.profesional.findMany({ where: { estado: "ACTIVO" }, select: PROFESIONAL_SIN_HASH })).map((p) =>
         calcularLiquidacionFacturador(p.id, mes)
       )
     ));

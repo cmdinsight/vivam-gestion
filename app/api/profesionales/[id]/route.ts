@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { PROFESIONAL_SIN_HASH } from "@/lib/facturadores";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const profesional = await prisma.profesional.findUnique({
     where: { id: params.id },
-    omit: { passwordHash: true },
+    select: PROFESIONAL_SIN_HASH,
   });
   if (!profesional) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
   return NextResponse.json(profesional);
@@ -16,7 +17,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const body = await req.json();
   const profesional = await prisma.profesional.update({
     where: { id: params.id },
-    omit: { passwordHash: true },
+    select: PROFESIONAL_SIN_HASH,
     data: {
       nombre: body.nombre,
       rol: body.rol,

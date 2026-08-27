@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { PROFESIONAL_SIN_HASH } from "@/lib/facturadores";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest) {
   const profesionales = await prisma.profesional.findMany({
     where: rol ? { rol: rol as "MEDICO" | "ENFERMERO" } : undefined,
     orderBy: [{ rol: "asc" }, { nombre: "asc" }],
-    omit: { passwordHash: true },
+    select: PROFESIONAL_SIN_HASH,
   });
   return NextResponse.json(profesionales);
 }
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const profesional = await prisma.profesional.create({
-    omit: { passwordHash: true },
+    select: PROFESIONAL_SIN_HASH,
     data: {
       nombre: body.nombre,
       rol: body.rol,
