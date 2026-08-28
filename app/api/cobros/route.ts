@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { currentMonth } from "@/lib/format";
 import { calcularMontoPorHora, calcularProrateoPrimerMes } from "@/lib/planes";
+import { marcarYSumarProcederesFacturados } from "@/lib/facturadores";
+import { Prisma } from "@prisma/client";
+
+const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +24,17 @@ export async function GET(req: NextRequest) {
 // "por hora" (sin plan), además recalcula el monto de los cobros PENDIENTE ya
 // existentes a partir de sus turnos reales del mes (los ya cobrados/atrasados
 // quedan fijos).
+//
+// En ambos casos (cobro nuevo o PENDIENTE existente, con plan o por hora) se
+// suman los procederes fuera de cupo del cliente ese mes que todavía no se
+// hubieran facturado — antes quedaban afuera del cálculo y había que
+// agregarlos a mano. montoProcederes guarda esa parte aparte para poder
+// recalcularla en cada corrida sin tocar el resto de montoEsperado (el plan
+// mensual queda congelado desde que se crea el cobro; las horas, en cambio,
+// se recalculan siempre desde los turnos reales). Un cobro ya
+// COBRADO/ATRASADO no se toca, así que un proceder cargado después de
+// cerrado el cobro del mes sigue quedando pendiente de facturar a mano (ver
+// alertas.procederesSinFacturar en el dashboard).
 export async function POST(req: NextRequest) {
   const { mes } = await req.json();
   const targetMes = mes || currentMonth();
@@ -30,42 +45,64 @@ export async function POST(req: NextRequest) {
   const existentesMap = new Map(existentes.map((c) => [c.clienteId, c]));
 
   const nuevos = clientes.filter((c) => !existentesMap.has(c.id));
-  if (nuevos.length > 0) {
-    const data = await Promise.all(
-      nuevos.map(async (c) => {
-        if (c.facturacion === "POR_HORA") {
-          return {
+  for (const c of nuevos) {
+    await prisma.$transaction(async (tx) => {
+      const montoProcederes = await marcarYSumarProcederesFacturados(tx, c.id, targetMes);
+      if (c.facturacion === "POR_HORA") {
+        const { total } = await calcularMontoPorHora(c.id, targetMes);
+        await tx.cobro.create({
+          data: {
             clienteId: c.id,
             mes: targetMes,
-            montoEsperado: (await calcularMontoPorHora(c.id, targetMes)).total,
+            montoEsperado: D(total).add(montoProcederes),
+            montoProcederes,
             fechaVencimiento: new Date(y, m - 1, 10),
-            estado: "PENDIENTE" as const,
+            estado: "PENDIENTE",
             notas: null,
-          };
-        }
-        const prorateo = calcularProrateoPrimerMes(c.precioMensual, c.fechaInicio, targetMes);
-        return {
+          },
+        });
+        return;
+      }
+      const prorateo = calcularProrateoPrimerMes(c.precioMensual, c.fechaInicio, targetMes);
+      const base = prorateo ? D(prorateo.monto) : D(c.precioMensual);
+      await tx.cobro.create({
+        data: {
           clienteId: c.id,
           mes: targetMes,
-          montoEsperado: prorateo ? prorateo.monto : c.precioMensual,
+          montoEsperado: base.add(montoProcederes),
+          montoProcederes,
           fechaVencimiento: new Date(y, m - 1, 10),
-          estado: "PENDIENTE" as const,
+          estado: "PENDIENTE",
           notas: prorateo
             ? `Prorrateado: primer mes de servicio, ${prorateo.diasUsados}/${prorateo.totalDias} días.`
             : null,
-        };
-      })
-    );
-    await prisma.cobro.createMany({ data });
+        },
+      });
+    });
   }
 
-  const clientesPorHora = new Map(clientes.filter((c) => c.facturacion === "POR_HORA").map((c) => [c.id, c]));
+  const clientesMap = new Map(clientes.map((c) => [c.id, c]));
   for (const cobro of existentes) {
-    if (cobro.estado !== "PENDIENTE" || !clientesPorHora.has(cobro.clienteId)) continue;
-    const { total } = await calcularMontoPorHora(cobro.clienteId, targetMes);
-    if (total !== parseFloat(cobro.montoEsperado.toString())) {
-      await prisma.cobro.update({ where: { id: cobro.id }, data: { montoEsperado: total } });
-    }
+    if (cobro.estado !== "PENDIENTE") continue;
+    const cliente = clientesMap.get(cobro.clienteId);
+    if (!cliente) continue;
+    await prisma.$transaction(async (tx) => {
+      const montoProcederes = await marcarYSumarProcederesFacturados(tx, cobro.clienteId, targetMes);
+      const montoBase =
+        cliente.facturacion === "POR_HORA"
+          ? D((await calcularMontoPorHora(cobro.clienteId, targetMes)).total)
+          : // Congelado desde que se creó el cobro: se recupera restando lo que
+            // ya tenía de procederes, en vez de recalcular el plan/prorrateo
+            // de nuevo (que debe quedar fijo aunque cambie el precio de lista).
+            D(cobro.montoEsperado).sub(cobro.montoProcederes);
+      const nuevoMonto = montoBase.add(montoProcederes);
+      if (!nuevoMonto.equals(cobro.montoEsperado) || !montoProcederes.equals(cobro.montoProcederes)) {
+        await tx.cobro.update({
+          where: { id: cobro.id },
+          data: { montoEsperado: nuevoMonto, montoProcederes },
+        });
+      }
+    });
   }
 
   const cobros = await prisma.cobro.findMany({

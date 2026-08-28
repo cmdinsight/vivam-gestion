@@ -93,6 +93,12 @@ export async function GET(req: NextRequest) {
       mensaje: `${facturadores.alertas.seguroVencido} profesional${facturadores.alertas.seguroVencido === 1 ? "" : "es"} facturador${facturadores.alertas.seguroVencido === 1 ? "" : "es"} activo${facturadores.alertas.seguroVencido === 1 ? "" : "s"} con el seguro de responsabilidad civil vencido o sin cargar.`,
     });
   }
+  if (facturadores.alertas.procederesSinFacturar > 0) {
+    alertas.push({
+      tipo: "procederesSinFacturar",
+      mensaje: `Hay ${facturadores.alertas.procederesSinFacturar} proceder${facturadores.alertas.procederesSinFacturar === 1 ? "" : "es"} fuera de cupo sin facturar este mes (el cobro del cliente ya estaba cerrado cuando se cargaron): hay que agregarlos a mano.`,
+    });
+  }
   const hoy = new Date();
   const proxJunio = new Date(hoy.getFullYear(), 5, 30);
   const proxDiciembre = new Date(hoy.getFullYear(), 11, 30);

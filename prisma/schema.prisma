@@ -78,6 +78,13 @@ model Cobro {
   cliente          Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   mes              String
   montoEsperado    Decimal     @db.Decimal(12, 2)
+  // Parte de montoEsperado que corresponde a procederes de enfermería fuera
+  // de cupo ya facturados a este cliente ese mes (ver
+  // marcarYSumarProcederesFacturados en lib/facturadores.ts). Se guarda
+  // aparte para poder recalcularla en cada corrida de "Generar cobros del
+  // mes" sin perder ni duplicar el resto de montoEsperado (el plan mensual
+  // o las horas, que se tratan cada uno con su propia regla de congelado).
+  montoProcederes  Decimal     @db.Decimal(12, 2) @default(0)
   fechaVencimiento DateTime
   estado           EstadoCobro @default(PENDIENTE)
   montoCobrado     Decimal?    @db.Decimal(12, 2)

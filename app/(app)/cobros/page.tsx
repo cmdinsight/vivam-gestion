@@ -7,6 +7,7 @@ type Cobro = {
   id: string;
   mes: string;
   montoEsperado: string;
+  montoProcederes: string;
   fechaVencimiento: string;
   estado: string;
   montoCobrado: string | null;
@@ -142,6 +143,11 @@ export default function CobrosPage() {
                   <td className="p-3">{c.cliente.familiaResponsable}</td>
                   <td className="p-3">
                     {money(c.montoEsperado)}
+                    {parseFloat(c.montoProcederes) > 0 && (
+                      <p className="text-xs text-navy/50 font-normal mt-0.5">
+                        de los cuales {money(c.montoProcederes)} por procederes fuera de cupo
+                      </p>
+                    )}
                     {c.notas && <p className="text-xs text-champagne font-normal mt-0.5">{c.notas}</p>}
                   </td>
                   <td className="p-3">{new Date(c.fechaVencimiento).toLocaleDateString("es-UY")}</td>

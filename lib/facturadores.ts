@@ -132,6 +132,41 @@ export async function registrarProceder(input: {
 }
 
 /**
+ * Marca como facturados los procederes de un cliente en un mes que todavía
+ * no se hubieran agregado a ningún Cobro, y devuelve el total acumulado (los
+ * recién marcados más los que ya lo estaban) de lo que hay que cobrarle por
+ * procederes fuera de cupo ese mes.
+ *
+ * Se llama SIEMPRE dentro de la misma transacción que crea o actualiza el
+ * Cobro del cliente, para que marcar y sumar sea atómico: si la escritura
+ * del cobro falla, el marcado se revierte y esos procederes vuelven a
+ * quedar pendientes para el próximo intento. Idempotente: correrlo varias
+ * veces en el mismo mes no duplica el monto, porque una vez marcado
+ * `facturado: true` un proceder ya no se vuelve a sumar como "nuevo", pero
+ * sigue contando en el total acumulado que se devuelve.
+ *
+ * Un Cobro ya COBRADO/ATRASADO no se vuelve a tocar (ver app/api/cobros/route.ts),
+ * así que un proceder fuera de cupo que se cargue después de cerrado el cobro
+ * del mes queda sin facturar — por eso resumenFacturadoresMes cuenta esos
+ * casos en `alertas.procederesSinFacturar`, para que no se pierdan de vista.
+ */
+export async function marcarYSumarProcederesFacturados(
+  tx: Prisma.TransactionClient,
+  clienteId: string,
+  mes: string
+) {
+  await tx.procederEjecutado.updateMany({
+    where: { clienteId, mes, facturado: false },
+    data: { facturado: true },
+  });
+  const agg = await tx.procederEjecutado.aggregate({
+    where: { clienteId, mes },
+    _sum: { montoCliente: true },
+  });
+  return agg._sum.montoCliente ?? D(0);
+}
+
+/**
  * Recalcula la numeración y el cupo de todos los procederes de un cliente en
  * un mes. Se usa después de borrar uno, para que la secuencia no quede con
  * huecos y alguien termine facturando de más.
@@ -327,6 +362,13 @@ export async function resumenFacturadoresMes(
   const seguroVencido = await prisma.profesional.count({
     where: { estado: "ACTIVO", OR: [{ seguroRcVence: null }, { seguroRcVence: { lt: new Date() } }] },
   });
+  // Procederes fuera de cupo que quedaron sin agregar a ningún Cobro: pasa
+  // cuando se cargan después de que el cobro del mes de ese cliente ya se
+  // cerró (COBRADO/ATRASADO), el único caso que "Generar cobros del mes" no
+  // vuelve a tocar. Hay que facturarlos aparte a mano.
+  const procederesSinFacturar = await prisma.procederEjecutado.count({
+    where: { mes, facturado: false, montoCliente: { gt: 0 } },
+  });
 
   // Se muestra aparte del resto del costo de médicos porque no tiene ningún
   // ingreso que lo compense (la valoración es gratis para el cliente): es
@@ -348,6 +390,6 @@ export async function resumenFacturadoresMes(
     pagadoProcederes,
     // Negativo es lo esperable al principio: el cupo incluido es costo de adquisición.
     margenProcederes: facturadoProcederes.sub(pagadoProcederes),
-    alertas: { notasSinCargar, sinBackup, seguroVencido },
+    alertas: { notasSinCargar, sinBackup, seguroVencido, procederesSinFacturar },
   };
 }
